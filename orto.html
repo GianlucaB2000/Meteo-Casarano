@@ -23,6 +23,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:11px 13px;}
 .lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sub);margin-bottom:4px;}
 .val{font-size:1.75rem;font-weight:700;color:var(--grn);font-family:'JetBrains Mono',monospace;line-height:1;}
+.ct .val{color:#58a6ff;}
+.ch .val{color:#3fb950;}
+.cts .val{color:#e3b341;}
+.clx .val{color:#facc15;}
+.cbg .val{color:#c084fc;}
+.cuv .val{color:#f85149;}
+.cr .val{color:#60a5fa;}
 .unit{font-size:.62rem;color:var(--sub);margin-top:3px;}
 .exl{margin-top:7px;display:flex;gap:10px;flex-wrap:wrap;font-size:.7rem;}
 .emn{color:#60a5fa;font-weight:600;font-family:'JetBrains Mono',monospace;}
@@ -54,39 +61,39 @@ body{padding-bottom:64px;}
 <div class="wrap">
     <div class="sec">Ultimo rilievo</div>
     <div class="grid">
-        <div class="card">
+        <div class="card ct">
             <div class="lbl">Temperatura</div>
             <div class="val" id="T">--</div>
             <div class="unit">°C</div>
             <div class="exl"><span class="emn" id="tMn">▼ --</span><span class="emx" id="tMx">▲ --</span></div>
         </div>
-        <div class="card">
+        <div class="card ch">
             <div class="lbl">Umidita</div>
             <div class="val" id="H">--</div>
             <div class="unit">%</div>
             <div class="exl"><span class="emn" id="hMn">▼ --</span><span class="emx" id="hMx">▲ --</span></div>
         </div>
-        <div class="card">
+        <div class="card cts">
             <div class="lbl">Temp. suolo</div>
             <div class="val" id="TS">--</div>
             <div class="unit">°C</div>
         </div>
-        <div class="card">
+        <div class="card clx">
             <div class="lbl">Radiazione</div>
             <div class="val" id="L">--</div>
             <div class="unit">lux</div>
         </div>
-        <div class="card">
+        <div class="card cbg">
             <div class="lbl">Delta solare</div>
             <div class="val" id="BG">--</div>
             <div class="unit">°C (black globe)</div>
         </div>
-        <div class="card">
+        <div class="card cuv">
             <div class="lbl">UV</div>
             <div class="val" id="UV">--</div>
             <div class="unit">indice</div>
         </div>
-        <div class="card">
+        <div class="card cr">
             <div class="lbl">Pioggia oggi</div>
             <div class="val" id="R">--</div>
             <div class="unit">mm</div>

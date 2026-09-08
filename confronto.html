@@ -26,9 +26,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .pagenav-btn:active{background:#0d1f33;}
 .pagenav-label{font-size:.72rem;color:var(--sub);text-align:center;flex:1;}
 body{padding-bottom:64px;}
-.chart-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:12px;}
-.chart-title{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin-bottom:8px;}
-.chart-wrap{position:relative;height:260px;}
+.chart-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 8px 12px 4px;margin-bottom:12px;}
+.chart-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin-bottom:8px;padding-left:8px;}
+.chart-wrap{position:relative;height:280px;}
 .status{font-size:.7rem;color:var(--sub);margin:10px 2px;}
 </style>
 </head>
@@ -145,19 +145,21 @@ body{padding-bottom:64px;}
         el('dPicco').textContent=fmt(dPicco); el('dPicco').style.color=colorFor(dPicco);
         el('status').textContent='Periodo: ultime 48h · '+withDelta.length+' punti allineati · media mobile 10 min';
 
+        const isMobile = window.innerWidth < 600;
         const baseOpts = {
             responsive:true, maintainAspectRatio:false, spanGaps:true,
             interaction:{ mode:'index', intersect:false },
-            plugins:{ legend:{ labels:{ color:'#c5d0e0', boxWidth:14, padding:12 } } },
+            layout:{ padding:{ right: 10 } },
+            plugins:{ legend:{ labels:{ color:'#c5d0e0', boxWidth:14, padding:12, font:{ size: isMobile?13:12 } } } },
             scales:{
-                x:{ type:'time', time:{ tooltipFormat:'dd/MM HH:mm', displayFormats:{hour:'HH:mm', day:'dd/MM'} }, ticks:{ color:'#8b9bb4', maxRotation:0 }, grid:{ color:'rgba(51,65,85,0.45)' } },
-                y:{ ticks:{ color:'#8b9bb4' }, grid:{ color:'rgba(51,65,85,0.45)' } }
+                x:{ type:'time', time:{ tooltipFormat:'dd/MM HH:mm', displayFormats:{hour:'HH:mm', day:'dd/MM'} }, ticks:{ color:'#8b9bb4', maxRotation:0, maxTicksLimit: isMobile?5:10, font:{ size: isMobile?11:10 } }, grid:{ color:'rgba(51,65,85,0.45)' } },
+                y:{ ticks:{ color:'#8b9bb4', maxTicksLimit: isMobile?6:8, font:{ size: isMobile?12:11 } }, grid:{ color:'rgba(51,65,85,0.45)' } }
             }
         };
 
         new Chart(el('cTemp'), { type:'line', data:{ datasets:[
-            { label:'Tetto', data: withDelta.map(p=>({x:p.t,y:p.tetto})), borderColor:'#38bdf8', borderWidth:1.8, pointRadius:0, tension:0.15 },
-            { label:'Orto',  data: withDelta.map(p=>({x:p.t,y:p.orto})),  borderColor:'#f87171', borderWidth:1.8, pointRadius:0, tension:0.15 }
+            { label:'Tetto', data: withDelta.map(p=>({x:p.t,y:p.tetto})), borderColor:'#38bdf8', borderWidth:2.4, pointRadius:0, tension:0.15 },
+            { label:'Orto',  data: withDelta.map(p=>({x:p.t,y:p.orto})),  borderColor:'#f87171', borderWidth:2.4, pointRadius:0, tension:0.15 }
         ]}, options: baseOpts });
 
         const dVals = withDelta.map(p=>p.delta);
@@ -165,7 +167,7 @@ body{padding-bottom:64px;}
         const deltaOpts = JSON.parse(JSON.stringify(baseOpts));
         deltaOpts.scales.y.min = yMin; deltaOpts.scales.y.max = yMax;
         new Chart(el('cDelta'), { type:'line', data:{ datasets:[
-            { label:'ΔT (Tetto − Orto)', data: withDelta.map(p=>({x:p.t,y:p.delta})), borderColor:'#38bdf8', borderWidth:1.6, pointRadius:0, tension:0.15,
+            { label:'ΔT (Tetto − Orto)', data: withDelta.map(p=>({x:p.t,y:p.delta})), borderColor:'#38bdf8', borderWidth:2.2, pointRadius:0, tension:0.15,
               fill:{ target:{value:0}, above:'rgba(251,146,60,0.25)', below:'rgba(74,222,128,0.25)' } }
         ]}, options: deltaOpts });
     }).catch(e=>{ console.warn(e); el('status').textContent='Errore nel caricamento dei dati'; });
