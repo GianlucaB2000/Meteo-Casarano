@@ -3,13 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Stazione Meteo Casarano</title> <link rel="manifest" href="manifest.json"> <link rel="icon" href="favicon-32.png"> <link rel="apple-touch-icon" href="apple-touch-icon.png"> <meta name="theme-color" content="#0d1117">
+    <title>Stazione Meteo Casarano</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
     <style>
         /* ─── CSS COPIA IDENTICA DA handleRoot() ─── */
         *{box-sizing:border-box;margin:0;padding:0}:root{--bg:#0d1117;--bg2:#161b22;--bg3:#1c2430;--brd:#30363d;--acc:#58a6ff;--grn:#3fb950;--ylw:#d29922;--red:#f85149;--orn:#e3b341;--txt:#e6edf3;--sub:#8b949e;--val:#cdd9e5;}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--txt);padding:0 0 32px;}.hdr{background:var(--bg2);border-bottom:1px solid var(--brd);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}.hdr-name{font-size:1rem;font-weight:700;color:var(--acc);}.hdr-loc{font-size:.7rem;color:var(--sub);font-family:'JetBrains Mono',monospace;}.hdr-r{text-align:right;font-size:.65rem;color:var(--sub);font-family:'JetBrains Mono',monospace;line-height:1.8;display:flex;align-items:center;gap:10px;}.hdr-r span{color:var(--txt);}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--grn);margin-right:3px;animation:blink 2s infinite;}@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}.gear-wrap{position:relative;}.gear-btn{background:none;border:1px solid var(--brd);border-radius:5px;color:var(--sub);cursor:pointer;padding:3px 7px;font-size:.8rem;transition:all .15s;}.gear-btn:hover{border-color:var(--acc);color:var(--acc);}.gear-drop{display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--bg2);border:1px solid var(--brd);border-radius:7px;min-width:160px;z-index:100;box-shadow:0 4px 16px rgba(0,0,0,.5);}.gear-drop.open{display:block;}.gear-item{display:block;padding:8px 14px;font-size:.7rem;color:var(--sub);text-decoration:none;cursor:pointer;border-bottom:1px solid var(--brd);white-space:nowrap;}.gear-item:last-child{border-bottom:none;}.gear-item:hover{color:var(--txt);background:var(--bg3);}.gear-item.danger{color:var(--red);}.gear-item.danger:hover{color:#ff8080;}.wrap{max-width:960px;margin:0 auto;padding:12px 10px 0;}.sec{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--sub);margin:14px 0 7px;padding-left:2px;}.grid{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));}.card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:11px 13px;}.lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sub);margin-bottom:4px;}.val{font-size:1.75rem;font-weight:700;color:var(--acc);font-family:'JetBrains Mono',monospace;line-height:1;}.unit{font-size:.62rem;color:var(--sub);margin-top:3px;}.sub{font-size:.7rem;color:var(--sub);margin-top:6px;line-height:1.7;}.sub span{color:var(--val);}.exl{margin-top:7px;display:flex;gap:10px;flex-wrap:wrap;}.emn{color:#60a5fa;font-size:.75rem;font-weight:600;font-family:'JetBrains Mono',monospace;}.emx{color:var(--orn);font-size:.75rem;font-weight:600;font-family:'JetBrains Mono',monospace;}.et{font-size:.55rem;color:var(--sub);display:block;}.cv .val{color:var(--grn);}.cr .val{color:#60a5fa;}.cs .val{color:var(--ylw);}.cp .val{color:#c084fc;}.cw{grid-column:1/-1;}.trend-badge{display:inline-flex;align-items:center;gap:4px;font-size:.72rem;font-weight:700;font-family:'JetBrains Mono',monospace;padding:2px 7px;border-radius:4px;margin-top:6px;}.trend-up{background:#2d1a1a;color:#f87171;}.trend-dn{background:#1a1e2d;color:#60a5fa;}.trend-st{background:#1c2430;color:var(--sub);}.trend-wait{background:#1c2430;color:var(--sub);font-style:italic;}.ex-tabs{display:flex;gap:2px;margin-top:8px;border-bottom:1px solid var(--brd);}.ex-tab{font-size:.58rem;text-transform:uppercase;letter-spacing:.06em;padding:3px 10px 4px;border-radius:5px 5px 0 0;cursor:pointer;color:var(--sub);background:none;border:1px solid transparent;border-bottom:none;transition:all .15s;}.ex-tab.active{color:var(--acc);background:var(--bg3);border-color:var(--brd);}.ex-panel{display:none;padding-top:6px;}.ex-panel.show{display:block;}.ex-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px;}.zam{display:flex;gap:14px;align-items:center;}.zlet{font-size:2.8rem;font-weight:800;color:var(--ylw);font-family:'JetBrains Mono',monospace;min-width:44px;text-align:center;}.zdesc{font-size:.92rem;font-weight:600;}.zhor{font-size:.68rem;color:var(--ylw);font-style:italic;margin-top:2px;}.ztr{font-size:.65rem;color:var(--sub);margin-top:2px;}.ztr span{color:var(--acc);}.zdiscl{font-size:.6rem;color:var(--sub);margin-top:5px;border-top:1px solid var(--brd);padding-top:4px;font-style:italic;}.sun-bar{background:var(--bg3);border-radius:5px;height:7px;position:relative;margin:7px 0 3px;overflow:hidden;}.sun-fill{height:100%;background:linear-gradient(90deg,#f59e0b,#fcd34d);border-radius:5px;transition:width .5s;}.next-evt{font-size:.78rem;font-weight:600;color:var(--ylw);margin-top:4px;}.next-sub{font-size:.65rem;color:var(--sub);}.twi-table{width:100%;font-size:.6rem;margin-top:7px;border-collapse:collapse;}.twi-table td{padding:1px 4px;color:var(--sub);}.twi-table td:first-child{color:var(--ylw);font-weight:600;white-space:nowrap;}.twi-table td:nth-child(2),.twi-table td:nth-child(3){color:var(--val);font-family:'JetBrains Mono',monospace;text-align:center;}.twi-sep{border-top:1px solid var(--brd);margin-top:5px;padding-top:5px;}.twi-night{font-size:.6rem;color:#818cf8;font-weight:600;margin-top:4px;}.elev-badge{display:inline-block;font-size:.72rem;font-family:'JetBrains Mono',monospace;color:#fcd34d;font-weight:700;margin-top:3px;}.elev-badge-moon{color:#a5b4fc;}.wind-card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;display:flex;gap:0;align-items:flex-start;flex-wrap:wrap;}.wind-compass-wrap{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;padding-right:16px;border-right:1px solid var(--brd);}.wind-dir-ext{text-align:center;margin-top:5px;font-size:.78rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--val);}.wind-dir-deg{font-size:.65rem;color:var(--sub);}.wr-toggle{display:flex;gap:4px;margin-top:8px;}.wr-btn{font-size:.58rem;padding:3px 8px;border-radius:4px;cursor:pointer;border:1px solid var(--brd);background:var(--bg3);color:var(--sub);transition:all .15s;}.wr-btn.active{border-color:var(--acc);color:var(--acc);background:#0d1f33;}.wind-spd-legend{display:flex;flex-direction:column;gap:3px;margin-top:8px;align-self:flex-start;}.wsl-item{display:flex;align-items:center;gap:5px;font-size:.58rem;color:var(--sub);}.wsl-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0;}.wind-data{flex:1 1 200px;display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;padding-left:16px;}.wd-item{display:flex;flex-direction:column;}.wd-lbl{font-size:.55rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sub);margin-bottom:3px;}.wd-val{font-size:1.6rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--grn);line-height:1;}.wd-unit{font-size:.6rem;color:var(--sub);margin-top:2px;}.wd-name{font-size:1.05rem;font-weight:700;color:var(--ylw);margin-top:2px;}.wd-exl{font-size:.68rem;font-family:'JetBrains Mono',monospace;margin-top:3px;color:var(--sub);}.wd-exl span.mn{color:#60a5fa;}.wd-exl span.mx{color:var(--orn);}.anem-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:11px 13px;}.anem-row{display:flex;gap:18px;flex-wrap:wrap;margin-top:6px;}.anem-item{display:flex;flex-direction:column;}.anem-val{font-size:1.4rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--grn);}.anem-lbl{font-size:.58rem;text-transform:uppercase;color:var(--sub);margin-top:2px;}.chart-section{margin-top:16px;}.chart-toolbar{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}.ct-btn{font-size:.62rem;padding:4px 12px;border-radius:5px;cursor:pointer;border:1px solid var(--brd);background:var(--bg3);color:var(--sub);transition:all .15s;}.ct-btn.active{border-color:var(--acc);color:var(--acc);background:#0d1f33;}.chart-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));}.chart-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;}.chart-title{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin-bottom:8px;}.chart-wrap{position:relative;height:220px;}.sysbar{background:var(--bg2);border:1px solid var(--brd);border-radius:8px;padding:7px 12px;font-size:.58rem;color:var(--sub);font-family:'JetBrains Mono',monospace;display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;}.sysbar span{color:var(--txt);}.badge{font-size:.53rem;padding:1px 5px;border-radius:3px;font-family:'JetBrains Mono',monospace;vertical-align:middle;}.bOk{background:#1a3a2a;color:var(--grn);}.bLo{background:#1a2a3a;color:#60a5fa;}
+.pagenav{position:fixed;left:0;right:0;bottom:0;background:var(--bg2);border-top:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between;padding:10px 6px;z-index:200;}
+.pagenav-btn{background:var(--bg3);border:1px solid var(--brd);color:var(--acc);font-size:1.4rem;line-height:1;padding:8px 18px;border-radius:8px;text-decoration:none;user-select:none;}
+.pagenav-btn:active{background:#0d1f33;}
+.pagenav-label{font-size:.72rem;color:var(--sub);text-align:center;flex:1;}
+body{padding-bottom:64px;}
     </style>
 </head>
 <body>
@@ -28,6 +33,8 @@
         <div class="gear-wrap">
             <button class="gear-btn" onclick="toggleGear()">⚙</button>
             <div class="gear-drop" id="gearDrop">
+                <a class="gear-item" href="orto.html">🌱 Stazione Orto</a>
+                <a class="gear-item" href="confronto.html">📊 Confronto Tetto/Orto</a>
                 <a class="gear-item" href="#" onclick="location.reload();">🔄 Ricarica</a>
                 <a class="gear-item danger" href="#" onclick="if(confirm('Resettare i dati locali?')){localStorage.clear();location.reload();}">🗑 Resetta cache</a>
             </div>
@@ -215,6 +222,7 @@
             <button class="ct-btn active" id="btn24h" onclick="setChartPeriod('24h')">Ultime 24h</button>
             <button class="ct-btn" id="btn7d" onclick="setChartPeriod('7d')">Ultimi 7 giorni</button>
             <button class="ct-btn" id="btn30d" onclick="setChartPeriod('30d')">30 giorni</button>
+            <button class="ct-btn" id="btnAnno" onclick="setChartPeriod('anno')">Anno</button>
             <button class="ct-btn" id="btnDailyAvg" style="display:none" onclick="toggleDailyAvg()">Giornaliero</button>
             <span style="font-size:.6rem;color:var(--sub);margin-left:4px;" id="chartStatus">Caricamento...</span>
         </div>
@@ -254,6 +262,12 @@
         <div class="card cr"><div class="lbl">Questo Mese (mm)</div><div class="val" id="rainMonth">--</div><div class="unit">mm</div></div>
         <div class="card cr"><div class="lbl">Quest'Anno (mm)</div><div class="val" id="rainYear">--</div><div class="unit">mm</div></div>
     </div>
+</div>
+
+<div class="pagenav">
+    <a class="pagenav-btn" href="confronto.html">‹</a>
+    <div class="pagenav-label">🌡 Tetto</div>
+    <a class="pagenav-btn" href="orto.html">›</a>
 </div>
 
 <script>
@@ -729,14 +743,15 @@
 
     // ─── Grafici con Chart.js ───
     let charts={};
-    function buildCharts(feeds, period) {
+    function buildCharts(feeds, period, windFeeds) {
         if (!feeds || feeds.length === 0) { safeSet('chartStatus', 'Nessun dato'); return; }
-        function toTimeSeries(field) {
-            return feeds.map(function(f) {
+        function toTimeSeriesFrom(arr, field) {
+            return arr.map(function(f) {
                 var v = parseFloat(f['field' + field]);
                 return { x: new Date(f.created_at).getTime(), y: (isNaN(v) || v === null) ? null : v };
             });
         }
+        function toTimeSeries(field) { return toTimeSeriesFrom(feeds, field); }
         function makeDataset(data, color, label) {
             return { label: label, data: data, borderColor: color, backgroundColor: 'transparent', borderWidth: 2, spanGaps: true, pointRadius: 0, pointHoverRadius: 8, pointHitRadius: 12, fill: false };
         }
@@ -758,17 +773,26 @@
         var hData = toTimeSeries(2);
         var pDataRaw = toTimeSeries(3);
         var pData = pDataRaw.map(function(p,i){ if(p.y===null||p.y<940||p.y>1050) return {x:p.x,y:null}; if(i>0){var prev=pDataRaw[i-1].y; if(prev!==null && Math.abs(p.y-prev)>3) return {x:p.x,y:null};} return p; });
-        var vData = toTimeSeries(4);
-        var gData = toTimeSeries(5);
+        // Il vento usa sempre la risoluzione fine (windFeeds, valorizzato solo
+        // nella vista 24h); se windFeeds non e' passato si ricade su 'feeds'.
+        var vData = toTimeSeriesFrom(windFeeds || feeds, 4);
+        var gData = toTimeSeriesFrom(windFeeds || feeds, 5);
         var lData = toTimeSeries(7).map(function(p){ return { x: p.x, y: (p.y===null)?null:Math.max(p.y,0.01) }; });
-        var rData = toTimeSeries(8);
+        // La pioggia accumulata non puo' mai essere negativa (e' un contatore che
+        // sale durante il giorno e si azzera a mezzanotte): eventuali valori
+        // negativi spuri vengono riportati a 0 invece di essere disegnati com'e'.
+        var rData = toTimeSeries(8).map(function(p){ return { x: p.x, y: (p.y===null)?null:Math.max(p.y,0) }; });
         makeChart('chartT', 'line', [makeDataset(tData, '#58a6ff', 'Temperatura')], null, baseOpts('°C'));
         makeChart('chartH', 'line', [makeDataset(hData, '#3fb950', 'Umidità')], null, baseOpts('%'));
         makeChart('chartP', 'line', [makeDataset(pData, '#c084fc', 'Pressione slm')], null, baseOpts('hPa'));
         makeChart('chartV', 'line', [makeDataset(vData, '#3fb950', 'Media'), makeDataset(gData, '#e3b341', 'Raffica')], null, baseOpts('km/h'));
         var lOpts = baseOpts('lux (log)'); lOpts.scales.y.type='logarithmic'; lOpts.scales.y.min=0.01;
         makeChart('chartL', 'line', [makeDataset(lData, '#f59e0b', 'Luce')], null, lOpts);
-        makeChart('chartR', 'line', [makeDataset(rData, '#60a5fa', 'Accumulo mm')], null, baseOpts('mm'));
+        // Asse Y del grafico pioggia bloccato a un minimo di 0: un accumulo di
+        // pioggia non puo' mai scendere sotto zero, nemmeno visivamente quando
+        // il contatore si azzera a mezzanotte.
+        var rOpts = baseOpts('mm'); rOpts.scales.y.min = 0;
+        makeChart('chartR', 'line', [makeDataset(rData, '#60a5fa', 'Accumulo mm')], null, rOpts);
         var rrData = [];
         for (var i = 1; i < rData.length; i++) {
             var prev = rData[i - 1];
@@ -790,19 +814,22 @@
     }
 
     // ─── Fetch ThingSpeak per grafici (con chunk) ───
-    function fetchThingSpeakChunk(start, end, average) {
+    // Nota: si usa 'median' invece di 'average' perche' la mediana e' meno
+    // sensibile a buchi/outlier nei dati (es. un campione mancante non
+    // fa crollare il valore come potrebbe fare una media aritmetica).
+    function fetchThingSpeakChunk(start, end, aggMinutes) {
         var url = 'https://api.thingspeak.com/channels/' + TS_CH + '/feeds.json?api_key=' + TS_RKEY + '&start=' + start.toISOString() + '&end=' + end.toISOString();
-        if (average) url += '&average=' + average;
+        if (aggMinutes) url += '&median=' + aggMinutes;
         return fetch(url).then(function(r) { return r.json(); }).then(function(data) { return (data && data.feeds) ? data.feeds : []; }).catch(function() { return []; });
     }
-    function fetchThingSpeakRange(totalStart, totalEnd, average, chunkDays) {
+    function fetchThingSpeakRange(totalStart, totalEnd, aggMinutes, chunkDays) {
         var chunks = [];
         var cursor = new Date(totalStart);
         while (cursor < totalEnd) {
             var chunkEnd = new Date(cursor);
             chunkEnd.setDate(chunkEnd.getDate() + chunkDays);
             if (chunkEnd > totalEnd) chunkEnd = new Date(totalEnd);
-            chunks.push(fetchThingSpeakChunk(new Date(cursor), chunkEnd, average));
+            chunks.push(fetchThingSpeakChunk(new Date(cursor), chunkEnd, aggMinutes));
             cursor = chunkEnd;
         }
         return Promise.all(chunks).then(function(results) {
@@ -822,15 +849,43 @@
     function aggregateDaily(feeds){ const days={}; feeds.forEach(f=>{ const day=f.created_at.substring(0,10); if(!days[day])days[day]={sum:{},cnt:{},created_at:day+'T12:00:00Z'}; [1,2,3,4,5,7,8].forEach(fld=>{ const v=parseFloat(f['field'+fld]); if(!isNaN(v)){ days[day].sum[fld]=(days[day].sum[fld]||0)+v; days[day].cnt[fld]=(days[day].cnt[fld]||0)+1; } }); }); return Object.keys(days).sort().map(day=>{ const d=days[day]; const feed={created_at:d.created_at}; [1,2,3,4,5,7,8].forEach(fld=>{ feed['field'+fld]=d.cnt[fld]?(d.sum[fld]/d.cnt[fld]):null; }); return feed; }); }
     function toggleDailyAvg(){ dailyAvgMode=!dailyAvgMode; const b=el('btnDailyAvg'); if(b)b.classList.toggle('active',dailyAvgMode); loadCharts(chartPeriod); }
 
+    // Risoluzione dedicata al grafico vento nella vista 24h: resta "fine"
+    // (10 min) come richiesto.
+    const AGG_24H_WIND = 10;
+    // Temperatura/umidita' (e gli altri grafici) nella vista 24h: dati grezzi,
+    // nessuna aggregazione/media.
+    const AGG_24H_MAIN = null;
+    // Grafico annuale: 1 punto ogni 12 ore (confronto giorno/notte), invece
+    // della vecchia media giornaliera ('daily' non e' nemmeno un parametro
+    // valido per l'API ThingSpeak: il parametro 'median' vuole i minuti).
+    const AGG_ANNO_MINUTES = 720; // 12h
+
     function loadCharts(period) {
         safeSet('chartStatus', 'Caricamento...');
         var end = new Date();
         var start = new Date();
-        var average = null;
-        if (period === '24h') { start.setHours(start.getHours() - 24); }
-        else if (period === '7d') { start.setDate(start.getDate() - 7); average = 10; }
-        else if (period === '30d') { start.setDate(start.getDate() - 30); average = 60; }
-        fetchThingSpeakRange(start, end, average, 4).then(function(feeds) {
+        var aggMinutes = null;
+        var chunkDays = 4;
+        if (period === '24h') { start.setHours(start.getHours() - 24); aggMinutes = AGG_24H_MAIN; }
+        else if (period === '7d') { start.setDate(start.getDate() - 7); aggMinutes = 10; }
+        else if (period === '30d') { start.setDate(start.getDate() - 30); aggMinutes = 60; }
+        else if (period === 'anno') { start.setFullYear(start.getFullYear() - 1); aggMinutes = AGG_ANNO_MINUTES; chunkDays = 370; }
+
+        if (period === '24h') {
+            // Due fetch in parallelo: dati "main" a grana piu' rada per
+            // temperatura/umidita'/pressione/ecc, e dati vento a grana fine.
+            Promise.all([
+                fetchThingSpeakRange(start, end, aggMinutes, chunkDays),
+                fetchThingSpeakRange(start, end, AGG_24H_WIND, chunkDays)
+            ]).then(function(results) {
+                var feedsMain = results[0], feedsWind = results[1];
+                if (!feedsMain || feedsMain.length === 0) { safeSet('chartStatus', 'Errore: nessun dato'); return; }
+                buildCharts(feedsMain, period, feedsWind);
+            }).catch(function(e) { safeSet('chartStatus', 'Errore caricamento'); console.warn(e); });
+            return;
+        }
+
+        fetchThingSpeakRange(start, end, aggMinutes, chunkDays).then(function(feeds) {
             if (!feeds || feeds.length === 0) { safeSet('chartStatus', 'Errore: nessun dato'); return; }
             if (period === '30d' && dailyAvgMode) feeds = aggregateDaily(feeds);
             buildCharts(feeds, period);
@@ -842,6 +897,7 @@
         el('btn24h').classList.toggle('active',p==='24h');
         el('btn7d').classList.toggle('active',p==='7d');
         el('btn30d').classList.toggle('active',p==='30d');
+        el('btnAnno').classList.toggle('active',p==='anno');
         const dailyBtn=el('btnDailyAvg');
         if(dailyBtn){ dailyBtn.style.display=(p==='30d')?'inline-block':'none'; }
         loadCharts(p);

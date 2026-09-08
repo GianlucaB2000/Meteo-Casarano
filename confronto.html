@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Confronto Tetto vs Orto</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0d1117;--bg2:#161b22;--bg3:#1c2430;--brd:#30363d;--acc:#58a6ff;--grn:#3fb950;--orn:#e3b341;--txt:#e6edf3;--sub:#8b949e;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--txt);padding:0 0 32px;}
+.hdr{background:var(--bg2);border-bottom:1px solid var(--brd);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}
+.hdr-name{font-size:1rem;font-weight:700;color:var(--acc);}
+.hdr-r{font-size:.65rem;color:var(--sub);font-family:'JetBrains Mono',monospace;}
+.hdr-r a{color:var(--acc);text-decoration:none;}
+.wrap{max-width:960px;margin:0 auto;padding:12px 10px 0;}
+.sec{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--sub);margin:14px 0 7px;padding-left:2px;}
+.grid{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:12px;}
+.card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:11px 13px;text-align:center;}
+.lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sub);margin-bottom:5px;}
+.val{font-size:1.5rem;font-weight:700;font-family:'JetBrains Mono',monospace;}
+.note{font-size:.65rem;color:var(--sub);margin-top:4px;}
+.pagenav{position:fixed;left:0;right:0;bottom:0;background:var(--bg2);border-top:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between;padding:10px 6px;z-index:200;}
+.pagenav-btn{background:var(--bg3);border:1px solid var(--brd);color:var(--acc);font-size:1.4rem;line-height:1;padding:8px 18px;border-radius:8px;text-decoration:none;user-select:none;}
+.pagenav-btn:active{background:#0d1f33;}
+.pagenav-label{font-size:.72rem;color:var(--sub);text-align:center;flex:1;}
+body{padding-bottom:64px;}
+.chart-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:12px;}
+.chart-title{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin-bottom:8px;}
+.chart-wrap{position:relative;height:260px;}
+.status{font-size:.7rem;color:var(--sub);margin:10px 2px;}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+    <div class="hdr-name">📊 Confronto Tetto vs Orto</div>
+    <div class="hdr-r"><a href="index.html">← Tetto</a> &nbsp;|&nbsp; <a href="orto.html">Orto →</a></div>
+</div>
+
+<div class="wrap">
+    <div class="status" id="status">Caricamento dati (ultime 48h)...</div>
+
+    <div class="sec">Delta termico (Tetto − Orto), media mobile 10 min</div>
+    <div class="grid">
+        <div class="card"><div class="lbl">Δ complessivo</div><div class="val" id="dTot">--</div><div class="note">Intero periodo</div></div>
+        <div class="card"><div class="lbl">Δ diurno (06-20)</div><div class="val" id="dGiorno">--</div><div class="note">Giorno intero</div></div>
+        <div class="card" style="border-color:var(--acc)"><div class="lbl">Δ picco sole 13-16</div><div class="val" id="dPicco">--</div><div class="note">Metrica principale</div></div>
+        <div class="card"><div class="lbl">Δ notturno</div><div class="val" id="dNotte">--</div><div class="note">Irraggiamento notturno</div></div>
+    </div>
+
+    <div class="chart-box">
+        <div class="chart-title">Temperature sovrapposte (Tetto vs Orto)</div>
+        <div class="chart-wrap" style="height:320px"><canvas id="cTemp"></canvas></div>
+    </div>
+    <div class="chart-box">
+        <div class="chart-title">Delta Tetto − Orto</div>
+        <div class="chart-wrap"><canvas id="cDelta"></canvas></div>
+    </div>
+</div>
+
+<div class="pagenav">
+    <a class="pagenav-btn" href="orto.html">‹</a>
+    <div class="pagenav-label">📊 Confronto</div>
+    <a class="pagenav-btn" href="index.html">›</a>
+</div>
+
+<script>
+    // Porting della logica dello script Python (tetto_vs_orto): stessa
+    // finestra (2 giorni), stessa media mobile 10 min e stesse fasce orarie
+    // per il calcolo del delta.
+    const TS_TETTO = 3217870, TS_TETTO_KEY = 'E1WOMQU43G4GNNXI';
+    const TS_ORTO  = 3358319, TS_ORTO_KEY  = '';
+    // Mappatura campi Orto confermata (canale 3358319): field1 = Temp Aria (SHT40).
+    const FIELD_ORTO_TEMP = 1;
+
+    function el(id){ return document.getElementById(id); }
+    function fmt(v){ return (v===null||v===undefined||isNaN(v))?'--':(v>=0?'+':'')+v.toFixed(3)+' °C'; }
+    function colorFor(v){ if(v===null||v===undefined||isNaN(v)) return '#94a3b8'; return v>0.05?'#fb923c':(v<-0.05?'#4ade80':'#94a3b8'); }
+
+    function fetchFeeds(ch,key){
+        const url='https://api.thingspeak.com/channels/'+ch+'/feeds.json?'+(key?'api_key='+key+'&':'')+'days=2';
+        return fetch(url).then(r=>r.json()).then(d=>(d&&d.feeds)?d.feeds:[]);
+    }
+
+    // Media mobile a finestra temporale (10 min) su una serie {t: ms, v: number|null}
+    function rollingMean10min(series){
+        const WIN = 10*60*1000;
+        const out = [];
+        let start = 0;
+        let sum = 0, cnt = 0;
+        // implementazione a due puntatori (i dati sono ordinati per tempo)
+        for(let i=0;i<series.length;i++){
+            if(series[i].v!==null){ sum+=series[i].v; cnt++; }
+            while(series[i].t - series[start].t > WIN){
+                if(series[start].v!==null){ sum-=series[start].v; cnt--; }
+                start++;
+            }
+            out.push({ t: series[i].t, v: cnt>=3 ? sum/cnt : null });
+        }
+        return out;
+    }
+
+    function alignByTimestamp(a,b){
+        // Allinea due serie sui timestamp del Tetto, prendendo il valore Orto
+        // piu' vicino entro 15 minuti (le due stazioni non campionano allo
+        // stesso istante).
+        const TOL = 15*60*1000;
+        let j=0;
+        const out=[];
+        for(let i=0;i<a.length;i++){
+            while(j<b.length-1 && Math.abs(b[j+1].t-a[i].t) <= Math.abs(b[j].t-a[i].t)) j++;
+            const dt = Math.abs(b[j].t-a[i].t);
+            out.push({ t:a[i].t, tetto:a[i].v, orto: dt<=TOL ? b[j].v : null });
+        }
+        return out;
+    }
+
+    Promise.all([ fetchFeeds(TS_TETTO,TS_TETTO_KEY), fetchFeeds(TS_ORTO,TS_ORTO_KEY) ]).then(([feedsT,feedsO])=>{
+        if(!feedsT.length || !feedsO.length){ el('status').textContent='Dati mancanti da una delle due stazioni'; return; }
+
+        const sT = feedsT.map(f=>({ t:new Date(f.created_at).getTime(), v: f.field1!==null&&f.field1!==undefined&&f.field1!==''?parseFloat(f.field1):null }));
+        const sO = feedsO.map(f=>({ t:new Date(f.created_at).getTime(), v: f['field'+FIELD_ORTO_TEMP]!==null&&f['field'+FIELD_ORTO_TEMP]!==undefined&&f['field'+FIELD_ORTO_TEMP]!==''?parseFloat(f['field'+FIELD_ORTO_TEMP]):null }));
+
+        const smT = rollingMean10min(sT);
+        const smO = rollingMean10min(sO);
+        const aligned = alignByTimestamp(smT, smO).filter(p=>p.tetto!==null && p.orto!==null);
+
+        if(!aligned.length){ el('status').textContent='Nessun punto allineato tra le due stazioni'; return; }
+
+        const withDelta = aligned.map(p=>({ t:p.t, tetto:p.tetto, orto:p.orto, delta:p.tetto-p.orto }));
+
+        function mean(arr){ return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null; }
+        const rome = t => { const d=new Date(t); return d.getHours()+d.getMinutes()/60; };
+
+        const dTot = mean(withDelta.map(p=>p.delta));
+        const dGiorno = mean(withDelta.filter(p=>{ const o=rome(p.t); return o>=6&&o<20; }).map(p=>p.delta));
+        const dNotte  = mean(withDelta.filter(p=>{ const o=rome(p.t); return o<6||o>=20; }).map(p=>p.delta));
+        const dPicco  = mean(withDelta.filter(p=>{ const o=rome(p.t); return o>=13&&o<16; }).map(p=>p.delta));
+
+        el('dTot').textContent=fmt(dTot); el('dTot').style.color=colorFor(dTot);
+        el('dGiorno').textContent=fmt(dGiorno); el('dGiorno').style.color=colorFor(dGiorno);
+        el('dNotte').textContent=fmt(dNotte); el('dNotte').style.color=colorFor(dNotte);
+        el('dPicco').textContent=fmt(dPicco); el('dPicco').style.color=colorFor(dPicco);
+        el('status').textContent='Periodo: ultime 48h · '+withDelta.length+' punti allineati · media mobile 10 min';
+
+        const baseOpts = {
+            responsive:true, maintainAspectRatio:false, spanGaps:true,
+            interaction:{ mode:'index', intersect:false },
+            plugins:{ legend:{ labels:{ color:'#c5d0e0', boxWidth:14, padding:12 } } },
+            scales:{
+                x:{ type:'time', time:{ tooltipFormat:'dd/MM HH:mm', displayFormats:{hour:'HH:mm', day:'dd/MM'} }, ticks:{ color:'#8b9bb4', maxRotation:0 }, grid:{ color:'rgba(51,65,85,0.45)' } },
+                y:{ ticks:{ color:'#8b9bb4' }, grid:{ color:'rgba(51,65,85,0.45)' } }
+            }
+        };
+
+        new Chart(el('cTemp'), { type:'line', data:{ datasets:[
+            { label:'Tetto', data: withDelta.map(p=>({x:p.t,y:p.tetto})), borderColor:'#38bdf8', borderWidth:1.8, pointRadius:0, tension:0.15 },
+            { label:'Orto',  data: withDelta.map(p=>({x:p.t,y:p.orto})),  borderColor:'#f87171', borderWidth:1.8, pointRadius:0, tension:0.15 }
+        ]}, options: baseOpts });
+
+        const dVals = withDelta.map(p=>p.delta);
+        const yMin = Math.min(...dVals)-0.04, yMax = Math.max(...dVals)+0.04;
+        const deltaOpts = JSON.parse(JSON.stringify(baseOpts));
+        deltaOpts.scales.y.min = yMin; deltaOpts.scales.y.max = yMax;
+        new Chart(el('cDelta'), { type:'line', data:{ datasets:[
+            { label:'ΔT (Tetto − Orto)', data: withDelta.map(p=>({x:p.t,y:p.delta})), borderColor:'#38bdf8', borderWidth:1.6, pointRadius:0, tension:0.15,
+              fill:{ target:{value:0}, above:'rgba(251,146,60,0.25)', below:'rgba(74,222,128,0.25)' } }
+        ]}, options: deltaOpts });
+    }).catch(e=>{ console.warn(e); el('status').textContent='Errore nel caricamento dei dati'; });
+</script>
+</body>
+</html>

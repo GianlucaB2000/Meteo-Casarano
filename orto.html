@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stazione Orto</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0d1117;--bg2:#161b22;--bg3:#1c2430;--brd:#30363d;--acc:#58a6ff;--grn:#3fb950;--ylw:#d29922;--red:#f85149;--orn:#e3b341;--txt:#e6edf3;--sub:#8b949e;--val:#cdd9e5;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--txt);padding:0 0 32px;}
+.hdr{background:var(--bg2);border-bottom:1px solid var(--brd);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}
+.hdr-name{font-size:1rem;font-weight:700;color:var(--grn);}
+.hdr-loc{font-size:.7rem;color:var(--sub);font-family:'JetBrains Mono',monospace;}
+.hdr-r{text-align:right;font-size:.65rem;color:var(--sub);font-family:'JetBrains Mono',monospace;}
+.hdr-r a{color:var(--acc);text-decoration:none;}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--grn);margin-right:3px;animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.wrap{max-width:960px;margin:0 auto;padding:12px 10px 0;}
+.sec{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--sub);margin:14px 0 7px;padding-left:2px;}
+.grid{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));}
+.card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:11px 13px;}
+.lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sub);margin-bottom:4px;}
+.val{font-size:1.75rem;font-weight:700;color:var(--grn);font-family:'JetBrains Mono',monospace;line-height:1;}
+.unit{font-size:.62rem;color:var(--sub);margin-top:3px;}
+.exl{margin-top:7px;display:flex;gap:10px;flex-wrap:wrap;font-size:.7rem;}
+.emn{color:#60a5fa;font-weight:600;font-family:'JetBrains Mono',monospace;}
+.emx{color:var(--orn);font-weight:600;font-family:'JetBrains Mono',monospace;}
+.chart-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:12px;}
+.chart-title{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin-bottom:8px;}
+.chart-wrap{position:relative;height:220px;}
+.note{font-size:.62rem;color:var(--sub);margin:10px 0;font-style:italic;}
+.pagenav{position:fixed;left:0;right:0;bottom:0;background:var(--bg2);border-top:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between;padding:10px 6px;z-index:200;}
+.pagenav-btn{background:var(--bg3);border:1px solid var(--brd);color:var(--acc);font-size:1.4rem;line-height:1;padding:8px 18px;border-radius:8px;text-decoration:none;user-select:none;}
+.pagenav-btn:active{background:#0d1f33;}
+.pagenav-label{font-size:.72rem;color:var(--sub);text-align:center;flex:1;}
+body{padding-bottom:64px;}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+    <div>
+        <div class="hdr-name">🌱 Stazione Orto</div>
+        <div class="hdr-loc">SHT40 · secondo punto di misura</div>
+    </div>
+    <div class="hdr-r">
+        <span class="dot"></span><span id="updAgo">--</span> fa &nbsp;|&nbsp; RSSI <span id="rssi">--</span> dBm<br>
+        <a href="index.html">← Tetto</a> &nbsp;|&nbsp; <a href="confronto.html">Confronto →</a>
+    </div>
+</div>
+
+<div class="wrap">
+    <div class="sec">Ultimo rilievo</div>
+    <div class="grid">
+        <div class="card">
+            <div class="lbl">Temperatura</div>
+            <div class="val" id="T">--</div>
+            <div class="unit">°C</div>
+            <div class="exl"><span class="emn" id="tMn">▼ --</span><span class="emx" id="tMx">▲ --</span></div>
+        </div>
+        <div class="card">
+            <div class="lbl">Umidita</div>
+            <div class="val" id="H">--</div>
+            <div class="unit">%</div>
+            <div class="exl"><span class="emn" id="hMn">▼ --</span><span class="emx" id="hMx">▲ --</span></div>
+        </div>
+        <div class="card">
+            <div class="lbl">Temp. suolo</div>
+            <div class="val" id="TS">--</div>
+            <div class="unit">°C</div>
+        </div>
+        <div class="card">
+            <div class="lbl">Radiazione</div>
+            <div class="val" id="L">--</div>
+            <div class="unit">lux</div>
+        </div>
+        <div class="card">
+            <div class="lbl">Delta solare</div>
+            <div class="val" id="BG">--</div>
+            <div class="unit">°C (black globe)</div>
+        </div>
+        <div class="card">
+            <div class="lbl">UV</div>
+            <div class="val" id="UV">--</div>
+            <div class="unit">indice</div>
+        </div>
+        <div class="card">
+            <div class="lbl">Pioggia oggi</div>
+            <div class="val" id="R">--</div>
+            <div class="unit">mm</div>
+        </div>
+    </div>
+
+    <div class="note">
+        Mappatura campi confermata: field1=Temp Aria, field2=Umidita Aria, field3=Temp Terra,
+        field4=Delta Solare (black globe), field5=WiFi RSSI, field6=Lux, field7=Pluviometro
+        (315 mm/impulso), field8=UV. Il segnale WiFi (RSSI) è mostrato in header, non tra le card
+        principali.
+    </div>
+
+    <div class="sec">Grafici (ultime 24h, dati grezzi)</div>
+    <div class="chart-box"><div class="chart-title">🌡 Temperatura (°C)</div><div class="chart-wrap"><canvas id="chartT"></canvas></div></div>
+    <div class="chart-box"><div class="chart-title">💧 Umidita (%)</div><div class="chart-wrap"><canvas id="chartH"></canvas></div></div>
+    <div class="chart-box"><div class="chart-title">☀ Radiazione (lux)</div><div class="chart-wrap"><canvas id="chartL"></canvas></div></div>
+</div>
+
+<div class="pagenav">
+    <a class="pagenav-btn" href="index.html">‹</a>
+    <div class="pagenav-label">🌱 Orto</div>
+    <a class="pagenav-btn" href="confronto.html">›</a>
+</div>
+
+<script>
+    const TS_CH_ORTO = 3358319;
+    const TS_RKEY_ORTO = ''; // se il canale e' pubblico puo' restare vuoto
+
+    // Mappatura campi confermata dal firmware della stazione Orto (canale 3358319):
+    // field1=Temp Aria (SHT40), field2=Umidita Aria (SHT40), field3=Temp Terra (DS18B20),
+    // field4=Delta Solare (Black Globe), field5=WiFi RSSI, field6=Lux (VEML7700),
+    // field7=Pluviometro (315 mm/impulso), field8=UV (GUVA-S12SD).
+    const FIELD = { temp:1, hum:2, soilTemp:3, blackGlobe:4, rssi:5, lux:6, rain:7, uv:8 };
+
+    function el(id){ return document.getElementById(id); }
+    function fmt(v,d=3){ return (v===null||v===undefined||isNaN(v))?'--':Number(v).toFixed(d); }
+
+    function fetchLive(){
+        const url='https://api.thingspeak.com/channels/'+TS_CH_ORTO+'/feeds/last.json'+(TS_RKEY_ORTO?'?api_key='+TS_RKEY_ORTO:'');
+        fetch(url).then(r=>r.json()).then(feed=>{
+            if(!feed) return;
+            el('T').textContent = fmt(feed['field'+FIELD.temp]);
+            el('H').textContent = fmt(feed['field'+FIELD.hum]);
+            el('TS').textContent = fmt(feed['field'+FIELD.soilTemp]);
+            el('L').textContent = fmt(feed['field'+FIELD.lux],0);
+            el('BG').textContent = fmt(feed['field'+FIELD.blackGlobe]);
+            el('UV').textContent = fmt(feed['field'+FIELD.uv]);
+            el('R').textContent = fmt(feed['field'+FIELD.rain]);
+            el('rssi').textContent = fmt(feed['field'+FIELD.rssi],0);
+            if(feed.created_at){
+                const ago = Math.round((Date.now()-new Date(feed.created_at).getTime())/60000);
+                el('updAgo').textContent = ago+' min';
+            }
+        }).catch(e=>console.warn('[orto live]',e));
+    }
+
+    function fetchExtremes24h(){
+        const start=new Date(Date.now()-24*3600*1000).toISOString();
+        const url='https://api.thingspeak.com/channels/'+TS_CH_ORTO+'/feeds.json?'+(TS_RKEY_ORTO?'api_key='+TS_RKEY_ORTO+'&':'')+'start='+start;
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(!data||!data.feeds||!data.feeds.length) return;
+            function extremes(field){
+                let mn=Infinity,mx=-Infinity;
+                data.feeds.forEach(f=>{ const v=parseFloat(f['field'+field]); if(!isNaN(v)){ if(v<mn)mn=v; if(v>mx)mx=v; } });
+                return {mn:mn===Infinity?null:mn, mx:mx===-Infinity?null:mx};
+            }
+            const t=extremes(FIELD.temp), h=extremes(FIELD.hum);
+            if(t.mn!==null){ el('tMn').textContent='▼ '+t.mn.toFixed(3); el('tMx').textContent='▲ '+t.mx.toFixed(3); }
+            if(h.mn!==null){ el('hMn').textContent='▼ '+h.mn.toFixed(3); el('hMx').textContent='▲ '+h.mx.toFixed(3); }
+        }).catch(e=>console.warn('[orto 24h]',e));
+    }
+
+    let charts={};
+    function makeChart(id,datasets,yLabel){
+        const ctx=el(id); if(!ctx) return;
+        const opts={
+            responsive:true, maintainAspectRatio:false, animation:{duration:300},
+            plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:10}, boxWidth:12, padding:8 } } },
+            scales:{
+                x:{ type:'time', time:{displayFormats:{hour:'HH:mm'}, tooltipFormat:'dd/MM HH:mm'}, ticks:{color:'#8b949e', font:{size:9}, maxTicksLimit:8}, grid:{color:'#1c2430'} },
+                y:{ ticks:{color:'#8b949e', font:{size:9}}, grid:{color:'#1c2430'}, title:{display:true, text:yLabel, color:'#8b949e', font:{size:9}} }
+            }
+        };
+        if(charts[id]){ charts[id].data.datasets=datasets; charts[id].update('none'); return; }
+        charts[id]=new Chart(ctx, { type:'line', data:{datasets}, options:opts });
+    }
+
+    function loadCharts(){
+        const start=new Date(Date.now()-24*3600*1000).toISOString();
+        const url='https://api.thingspeak.com/channels/'+TS_CH_ORTO+'/feeds.json?'+(TS_RKEY_ORTO?'api_key='+TS_RKEY_ORTO+'&':'')+'start='+start;
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(!data||!data.feeds||!data.feeds.length) return;
+            const feeds=data.feeds;
+            function series(field){ return feeds.map(f=>({x:new Date(f.created_at).getTime(), y:(f['field'+field]===null||f['field'+field]===undefined)?null:parseFloat(f['field'+field])})); }
+            makeChart('chartT', [
+                { label:'Temperatura', data:series(FIELD.temp), borderColor:'#58a6ff', borderWidth:2, pointRadius:0, spanGaps:true }
+            ], '°C');
+            makeChart('chartH', [
+                { label:'Umidita', data:series(FIELD.hum), borderColor:'#3fb950', borderWidth:2, pointRadius:0, spanGaps:true }
+            ], '%');
+            makeChart('chartL', [
+                { label:'Lux', data:series(FIELD.lux), borderColor:'#facc15', borderWidth:2, pointRadius:0, spanGaps:true }
+            ], 'lux');
+        }).catch(e=>console.warn('[orto charts]',e));
+    }
+
+    fetchLive(); fetchExtremes24h(); loadCharts();
+    setInterval(fetchLive, 15000);
+    setInterval(fetchExtremes24h, 600000);
+    setInterval(loadCharts, 600000);
+</script>
+</body>
+</html>
