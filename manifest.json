@@ -1,0 +1,15 @@
+{
+  "name": "Stazione Meteo Casarano",
+  "short_name": "Meteo Casarano",
+  "description": "Dashboard live della stazione meteo di Casarano",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
