@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Stazione Meteo Casarano</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        /* ─── CSS COPIA IDENTICA DA handleRoot() ─── */
+        *{box-sizing:border-box;margin:0;padding:0}:root{--bg:#0d1117;--bg2:#161b22;--bg3:#1c2430;--brd:#30363d;--acc:#58a6ff;--grn:#3fb950;--ylw:#d29922;--red:#f85149;--orn:#e3b341;--txt:#e6edf3;--sub:#8b949e;--val:#cdd9e5;}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--txt);padding:0 0 32px;}.hdr{background:var(--bg2);border-bottom:1px solid var(--brd);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}.hdr-name{font-size:1rem;font-weight:700;color:var(--acc);}.hdr-loc{font-size:.7rem;color:var(--sub);font-family:'JetBrains Mono',monospace;}.hdr-r{text-align:right;font-size:.65rem;color:var(--sub);font-family:'JetBrains Mono',monospace;line-height:1.8;display:flex;align-items:center;gap:10px;}.hdr-r span{color:var(--txt);}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--grn);margin-right:3px;animation:blink 2s infinite;}@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}.gear-wrap{position:relative;}.gear-btn{background:none;border:1px solid var(--brd);border-radius:5px;color:var(--sub);cursor:pointer;padding:3px 7px;font-size:.8rem;transition:all .15s;}.gear-btn:hover{border-color:var(--acc);color:var(--acc);}.gear-drop{display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--bg2);border:1px solid var(--brd);border-radius:7px;min-width:160px;z-index:100;box-shadow:0 4px 16px rgba(0,0,0,.5);}.gear-drop.open{display:block;}.gear-item{display:block;padding:8px 14px;font-size:.7rem;color:var(--sub);text-decoration:none;cursor:pointer;border-bottom:1px solid var(--brd);white-space:nowrap;}.gear-item:last-child{border-bottom:none;}.gear-item:hover{color:var(--txt);background:var(--bg3);}.gear-item.danger{color:var(--red);}.gear-item.danger:hover{color:#ff8080;}.wrap{max-width:960px;margin:0 auto;padding:12px 10px 0;}.sec{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--sub);margin:14px 0 7px;padding-left:2px;}.grid{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));}.card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:11px 13px;}.lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sub);margin-bottom:4px;}.val{font-size:1.75rem;font-weight:700;color:var(--acc);font-family:'JetBrains Mono',monospace;line-height:1;}.unit{font-size:.62rem;color:var(--sub);margin-top:3px;}.sub{font-size:.7rem;color:var(--sub);margin-top:6px;line-height:1.7;}.sub span{color:var(--val);}.exl{margin-top:7px;display:flex;gap:10px;flex-wrap:wrap;}.emn{color:#60a5fa;font-size:.75rem;font-weight:600;font-family:'JetBrains Mono',monospace;}.emx{color:var(--orn);font-size:.75rem;font-weight:600;font-family:'JetBrains Mono',monospace;}.et{font-size:.55rem;color:var(--sub);display:block;}.cv .val{color:var(--grn);}.cr .val{color:#60a5fa;}.cs .val{color:var(--ylw);}.cp .val{color:#c084fc;}.cw{grid-column:1/-1;}.trend-badge{display:inline-flex;align-items:center;gap:4px;font-size:.72rem;font-weight:700;font-family:'JetBrains Mono',monospace;padding:2px 7px;border-radius:4px;margin-top:6px;}.trend-up{background:#2d1a1a;color:#f87171;}.trend-dn{background:#1a1e2d;color:#60a5fa;}.trend-st{background:#1c2430;color:var(--sub);}.trend-wait{background:#1c2430;color:var(--sub);font-style:italic;}.ex-tabs{display:flex;gap:2px;margin-top:8px;border-bottom:1px solid var(--brd);}.ex-tab{font-size:.58rem;text-transform:uppercase;letter-spacing:.06em;padding:3px 10px 4px;border-radius:5px 5px 0 0;cursor:pointer;color:var(--sub);background:none;border:1px solid transparent;border-bottom:none;transition:all .15s;}.ex-tab.active{color:var(--acc);background:var(--bg3);border-color:var(--brd);}.ex-panel{display:none;padding-top:6px;}.ex-panel.show{display:block;}.ex-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px;}.zam{display:flex;gap:14px;align-items:center;}.zlet{font-size:2.8rem;font-weight:800;color:var(--ylw);font-family:'JetBrains Mono',monospace;min-width:44px;text-align:center;}.zdesc{font-size:.92rem;font-weight:600;}.zhor{font-size:.68rem;color:var(--ylw);font-style:italic;margin-top:2px;}.ztr{font-size:.65rem;color:var(--sub);margin-top:2px;}.ztr span{color:var(--acc);}.zdiscl{font-size:.6rem;color:var(--sub);margin-top:5px;border-top:1px solid var(--brd);padding-top:4px;font-style:italic;}.sun-bar{background:var(--bg3);border-radius:5px;height:7px;position:relative;margin:7px 0 3px;overflow:hidden;}.sun-fill{height:100%;background:linear-gradient(90deg,#f59e0b,#fcd34d);border-radius:5px;transition:width .5s;}.next-evt{font-size:.78rem;font-weight:600;color:var(--ylw);margin-top:4px;}.next-sub{font-size:.65rem;color:var(--sub);}.twi-table{width:100%;font-size:.6rem;margin-top:7px;border-collapse:collapse;}.twi-table td{padding:1px 4px;color:var(--sub);}.twi-table td:first-child{color:var(--ylw);font-weight:600;white-space:nowrap;}.twi-table td:nth-child(2),.twi-table td:nth-child(3){color:var(--val);font-family:'JetBrains Mono',monospace;text-align:center;}.twi-sep{border-top:1px solid var(--brd);margin-top:5px;padding-top:5px;}.twi-night{font-size:.6rem;color:#818cf8;font-weight:600;margin-top:4px;}.elev-badge{display:inline-block;font-size:.72rem;font-family:'JetBrains Mono',monospace;color:#fcd34d;font-weight:700;margin-top:3px;}.elev-badge-moon{color:#a5b4fc;}.wind-card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;display:flex;gap:0;align-items:flex-start;flex-wrap:wrap;}.wind-compass-wrap{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;padding-right:16px;border-right:1px solid var(--brd);}.wind-dir-ext{text-align:center;margin-top:5px;font-size:.78rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--val);}.wind-dir-deg{font-size:.65rem;color:var(--sub);}.wr-toggle{display:flex;gap:4px;margin-top:8px;}.wr-btn{font-size:.58rem;padding:3px 8px;border-radius:4px;cursor:pointer;border:1px solid var(--brd);background:var(--bg3);color:var(--sub);transition:all .15s;}.wr-btn.active{border-color:var(--acc);color:var(--acc);background:#0d1f33;}.wind-spd-legend{display:flex;flex-direction:column;gap:3px;margin-top:8px;align-self:flex-start;}.wsl-item{display:flex;align-items:center;gap:5px;font-size:.58rem;color:var(--sub);}.wsl-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0;}.wind-data{flex:1 1 200px;display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;padding-left:16px;}.wd-item{display:flex;flex-direction:column;}.wd-lbl{font-size:.55rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sub);margin-bottom:3px;}.wd-val{font-size:1.6rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--grn);line-height:1;}.wd-unit{font-size:.6rem;color:var(--sub);margin-top:2px;}.wd-name{font-size:1.05rem;font-weight:700;color:var(--ylw);margin-top:2px;}.wd-exl{font-size:.68rem;font-family:'JetBrains Mono',monospace;margin-top:3px;color:var(--sub);}.wd-exl span.mn{color:#60a5fa;}.wd-exl span.mx{color:var(--orn);}.anem-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:11px 13px;}.anem-row{display:flex;gap:18px;flex-wrap:wrap;margin-top:6px;}.anem-item{display:flex;flex-direction:column;}.anem-val{font-size:1.4rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--grn);}.anem-lbl{font-size:.58rem;text-transform:uppercase;color:var(--sub);margin-top:2px;}.chart-section{margin-top:16px;}.chart-toolbar{display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}.ct-btn{font-size:.62rem;padding:4px 12px;border-radius:5px;cursor:pointer;border:1px solid var(--brd);background:var(--bg3);color:var(--sub);transition:all .15s;}.ct-btn.active{border-color:var(--acc);color:var(--acc);background:#0d1f33;}.chart-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));}.chart-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;}.chart-title{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin-bottom:8px;}.chart-wrap{position:relative;height:220px;}.sysbar{background:var(--bg2);border:1px solid var(--brd);border-radius:8px;padding:7px 12px;font-size:.58rem;color:var(--sub);font-family:'JetBrains Mono',monospace;display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;}.sysbar span{color:var(--txt);}.badge{font-size:.53rem;padding:1px 5px;border-radius:3px;font-family:'JetBrains Mono',monospace;vertical-align:middle;}.bOk{background:#1a3a2a;color:var(--grn);}.bLo{background:#1a2a3a;color:#60a5fa;}
+    </style>
+</head>
+<body>
+
+<div class="hdr">
+    <div>
+        <div class="hdr-name">🌡 Stazione Meteo Casarano</div>
+        <div class="hdr-loc">Casarano • 139 m s.l.m.</div>
+    </div>
+    <div class="hdr-r">
+        <div>
+            <span class="dot"></span>
+            <span id="updAgo">--</span> &nbsp;|&nbsp; Ora: <span id="ora">--</span><br>
+            FW <span id="fw">Standalone</span> &nbsp;|&nbsp; RSSI <span id="rssi">--</span> dBm
+        </div>
+        <div class="gear-wrap">
+            <button class="gear-btn" onclick="toggleGear()">⚙</button>
+            <div class="gear-drop" id="gearDrop">
+                <a class="gear-item" href="#" onclick="location.reload();">🔄 Ricarica</a>
+                <a class="gear-item danger" href="#" onclick="if(confirm('Resettare i dati locali?')){localStorage.clear();location.reload();}">🗑 Resetta cache</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="wrap">
+
+    <!-- Zambretti -->
+    <div class="sec">Previsione Zambretti</div>
+    <div class="card cw">
+        <div class="zam">
+            <div class="zlet" id="zL">-</div>
+            <div>
+                <div class="zdesc" id="zD">In attesa dati</div>
+                <div class="zhor" id="zH"></div>
+                <div class="ztr">Press: <span id="zS">---</span> &mdash; <span id="zT">---</span> hPa/3h</div>
+            </div>
+        </div>
+        <div class="zdiscl">ⓘ Previsione barometrica (metodo Zambretti 1920, corretto per 40°N). Dati da ThingSpeak.</div>
+    </div>
+
+    <!-- Outdoor -->
+    <div class="sec">Outdoor</div>
+    <div class="grid">
+        <div class="card">
+            <div class="lbl">Temperatura</div>
+            <div class="val" id="T">--</div>
+            <div class="unit">°C &nbsp;<span class="trend-badge trend-wait" id="trendBadge">⏳ calcolo...</span></div>
+            <div class="sub" style="margin-top:4px;">Percepita: <span id="FL">--</span>°C</div>
+            <div class="ex-tabs">
+                <button class="ex-tab active" onclick="switchTab(this,'t','24')">24h</button>
+                <button class="ex-tab" onclick="switchTab(this,'t','mo')">Mese</button>
+                <button class="ex-tab" onclick="switchTab(this,'t','yr')">Anno</button>
+            </div>
+            <div id="t_24" class="ex-panel show"><div class="ex-row"><div><span class="emn" id="t24Mn_v">--</span><span class="et" id="t24Mn_t"></span></div><div><span class="emx" id="t24Mx_v">--</span><span class="et" id="t24Mx_t"></span></div></div></div>
+            <div id="t_mo" class="ex-panel"><div class="ex-row"><div><span class="emn" id="tMoMn_v">--</span><span class="et" id="tMoMn_t"></span></div><div><span class="emx" id="tMoMx_v">--</span><span class="et" id="tMoMx_t"></span></div></div></div>
+            <div id="t_yr" class="ex-panel"><div class="ex-row"><div><span class="emn" id="tYrMn_v">--</span><span class="et" id="tYrMn_t"></span></div><div><span class="emx" id="tYrMx_v">--</span><span class="et" id="tYrMx_t"></span></div></div></div>
+        </div>
+
+        <div class="card">
+            <div class="lbl">Umidita</div>
+            <div class="val" id="H">--</div>
+            <div class="unit">% &nbsp;<span class="trend-badge trend-wait" id="trendBadgeH">⏳ calcolo...</span></div>
+            <div class="sub" style="margin-top:6px;">Rugiada: <span id="DP">--</span>°C</div>
+            <div class="ex-tabs">
+                <button class="ex-tab active" onclick="switchTab(this,'h','24')">24h</button>
+                <button class="ex-tab" onclick="switchTab(this,'h','mo')">Mese</button>
+                <button class="ex-tab" onclick="switchTab(this,'h','yr')">Anno</button>
+            </div>
+            <div id="h_24" class="ex-panel show"><div class="ex-row"><div><span class="emn" id="h24Mn_v">--</span><span class="et" id="h24Mn_t"></span></div><div><span class="emx" id="h24Mx_v">--</span><span class="et" id="h24Mx_t"></span></div></div></div>
+            <div id="h_mo" class="ex-panel"><div class="ex-row"><div><span class="emn" id="hMoMn_v">--</span><span class="et" id="hMoMn_t"></span></div><div><span class="emx" id="hMoMx_v">--</span><span class="et" id="hMoMx_t"></span></div></div></div>
+            <div id="h_yr" class="ex-panel"><div class="ex-row"><div><span class="emn" id="hYrMn_v">--</span><span class="et" id="hYrMn_t"></span></div><div><span class="emx" id="hYrMx_v">--</span><span class="et" id="hYrMx_t"></span></div></div></div>
+        </div>
+
+        <div class="card cp">
+            <div class="lbl">Pressione s.l.m.</div>
+            <div class="val" id="Pslp">--</div>
+            <div class="unit">hPa &nbsp;<span class="trend-badge trend-wait" id="trendBadgeP">⏳ calcolo...</span></div>
+            <div class="sub">Stazione: <span id="P">--</span> hPa</div>
+            <div class="ex-tabs">
+                <button class="ex-tab active" onclick="switchTab(this,'p','24')">24h</button>
+                <button class="ex-tab" onclick="switchTab(this,'p','mo')">Mese</button>
+                <button class="ex-tab" onclick="switchTab(this,'p','yr')">Anno</button>
+            </div>
+            <div id="p_24" class="ex-panel show"><div class="ex-row"><div><span class="emn" id="p24Mn_v">--</span><span class="et" id="p24Mn_t"></span></div><div><span class="emx" id="p24Mx_v">--</span><span class="et" id="p24Mx_t"></span></div></div></div>
+            <div id="p_mo" class="ex-panel"><div class="ex-row"><div><span class="emn" id="pMoMn_v">--</span><span class="et" id="pMoMn_t"></span></div><div><span class="emx" id="pMoMx_v">--</span><span class="et" id="pMoMx_t"></span></div></div></div>
+            <div id="p_yr" class="ex-panel"><div class="ex-row"><div><span class="emn" id="pYrMn_v">--</span><span class="et" id="pYrMn_t"></span></div><div><span class="emx" id="pYrMx_v">--</span><span class="et" id="pYrMx_t"></span></div></div></div>
+        </div>
+    </div>
+
+    <!-- Solare -->
+    <div class="sec">Solare</div>
+    <div class="grid">
+        <div class="card cs">
+            <div class="lbl">Radiazione</div>
+            <div class="val" id="L">--</div>
+            <div class="unit">lux</div>
+            <div class="ex-tabs">
+                <button class="ex-tab active" onclick="switchTab(this,'l','24')">24h</button>
+                <button class="ex-tab" onclick="switchTab(this,'l','mo')">Mese</button>
+                <button class="ex-tab" onclick="switchTab(this,'l','yr')">Anno</button>
+            </div>
+            <div id="l_24" class="ex-panel show"><div class="ex-row"><div><span class="emn" id="l24Mn_v">--</span><span class="et" id="l24Mn_t"></span></div><div><span class="emx" id="l24Mx_v">--</span><span class="et" id="l24Mx_t"></span></div></div></div>
+            <div id="l_mo" class="ex-panel"><div class="ex-row"><div><span class="emn" id="lMoMn_v">--</span><span class="et" id="lMoMn_t"></span></div><div><span class="emx" id="lMoMx_v">--</span><span class="et" id="lMoMx_t"></span></div></div></div>
+            <div id="l_yr" class="ex-panel"><div class="ex-row"><div><span class="emn" id="lYrMn_v">--</span><span class="et" id="lYrMn_t"></span></div><div><span class="emx" id="lYrMx_v">--</span><span class="et" id="lYrMx_t"></span></div></div></div>
+        </div>
+
+        <div class="card cs" style="grid-column:span 2;min-width:280px;">
+            <div class="lbl">Sole</div>
+            <div class="sub">☀ Alba <span id="SR">--</span> &nbsp;/&nbsp; Tramonto <span id="SS">--</span></div>
+            <div class="sun-bar"><div class="sun-fill" id="sunFill" style="width:0"></div></div>
+            <div style="display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;">
+                <div class="next-evt" id="nextEvtLabel">--</div>
+                <div class="next-sub" id="nextEvtSub"></div>
+                <div class="elev-badge">☀ <span id="sunElev">--</span>°</div>
+            </div>
+            <div style="margin-top:8px;background:var(--bg3);padding:4px 8px;border-radius:6px;"><span id="phaseName" style="font-size:.75rem;font-weight:600;">--</span></div>
+            <table class="twi-table twi-sep">
+                <tr><td>Crepuscolo civile</td><td id="twC_r">--</td><td id="twC_s">--</td></tr>
+                <tr><td>Crepuscolo nautico</td><td id="twN_r">--</td><td id="twN_s">--</td></tr>
+                <tr><td>Crepuscolo astronomico</td><td id="twA_r">--</td><td id="twA_s">--</td></tr>
+            </table>
+            <div class="twi-night" id="astroNight"></div>
+        </div>
+
+        <div class="card cs">
+            <div class="lbl">Luna</div>
+            <div style="font-size:2rem;line-height:1;margin-bottom:4px" id="moonIcon">🌑</div>
+            <div class="sub" id="moonPhase">--</div>
+            <div class="sub" style="margin-top:4px">◑ <span id="MR">--</span> / <span id="MS">--</span></div>
+            <div class="sub" style="margin-top:4px;color:#a5b4fc;">⭐ Costellazione: <span id="moonConst">--</span></div>
+            <div class="elev-badge elev-badge-moon" style="margin-top:3px;"><span id="moonElev">--</span>°</div>
+            <div class="next-evt" id="moonNextLabel">--</div>
+            <div class="next-sub" id="moonNextSub"></div>
+        </div>
+    </div>
+
+    <!-- Vento -->
+    <div class="wind-card">
+        <div class="wind-compass-wrap">
+            <div style="display:flex;gap:10px;align-items:flex-start;">
+                <div style="display:flex;flex-direction:column;align-items:center;">
+                    <canvas id="cmp" width="180" height="180"></canvas>
+                    <div class="wind-dir-ext">
+                        <span id="windDirName">--</span><br>
+                        <span class="wind-dir-deg"><span id="D">--</span>° &nbsp;<span class="badge" id="DA">--</span></span>
+                    </div>
+                    <div class="wr-toggle">
+                        <button class="wr-btn" id="wrBtnArrow" onclick="setWindMode('arrow')">Freccia</button>
+                        <button class="wr-btn" id="wrBtnRadar" onclick="setWindMode('radar')">Radar</button>
+                        <button class="wr-btn active" id="wrBtnBoth" onclick="setWindMode('both')">Entrambe</button>
+                    </div>
+                </div>
+                <div class="wind-spd-legend">
+                    <div style="font-size:.55rem;color:var(--sub);margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em;">km/h</div>
+                    <div class="wsl-item"><div class="wsl-dot" style="background:rgba(144,202,249,0.8)"></div>0-5</div>
+                    <div class="wsl-item"><div class="wsl-dot" style="background:rgba(102,187,106,0.8)"></div>5-10</div>
+                    <div class="wsl-item"><div class="wsl-dot" style="background:rgba(255,183,77,0.8)"></div>10-15</div>
+                    <div class="wsl-item"><div class="wsl-dot" style="background:rgba(239,83,80,0.8)"></div>15-20</div>
+                    <div class="wsl-item"><div class="wsl-dot" style="background:rgba(186,104,200,0.8)"></div>&gt;20</div>
+                </div>
+            </div>
+        </div>
+        <div class="wind-data">
+            <div class="wd-item">
+                <div class="wd-lbl">Velocita media</div>
+                <div class="wd-val" id="V">--</div>
+                <div class="wd-unit">km/h</div>
+                <div class="ex-tabs">
+                    <button class="ex-tab active" onclick="switchTab(this,'v','24')">24h</button>
+                    <button class="ex-tab" onclick="switchTab(this,'v','mo')">Mese</button>
+                    <button class="ex-tab" onclick="switchTab(this,'v','yr')">Anno</button>
+                </div>
+                <div id="v_24" class="ex-panel show"><div class="wd-exl"><span class="mn" id="v24Mn_v">--</span> <span class="mx" id="v24Mx_v">--</span></div><div class="wd-exl" style="font-size:.55rem;"><span id="v24Mn_t"></span>&nbsp;<span id="v24Mx_t"></span></div></div>
+                <div id="v_mo" class="ex-panel"><div class="wd-exl"><span class="mn" id="vMoMn_v">--</span> <span class="mx" id="vMoMx_v">--</span></div></div>
+                <div id="v_yr" class="ex-panel"><div class="wd-exl"><span class="mn" id="vYrMn_v">--</span> <span class="mx" id="vYrMx_v">--</span></div></div>
+            </div>
+            <div class="wd-item">
+                <div class="wd-lbl">Raffica</div>
+                <div class="wd-val" id="G">--</div>
+                <div class="wd-unit">km/h</div>
+                <div class="ex-tabs">
+                    <button class="ex-tab active" onclick="switchTab(this,'g','24')">24h</button>
+                    <button class="ex-tab" onclick="switchTab(this,'g','mo')">Mese</button>
+                    <button class="ex-tab" onclick="switchTab(this,'g','yr')">Anno</button>
+                </div>
+                <div id="g_24" class="ex-panel show"><div class="wd-exl"><span class="mx" id="g24Mx_v">--</span></div><div class="wd-exl" style="font-size:.55rem;"><span id="g24Mx_t"></span></div></div>
+                <div id="g_mo" class="ex-panel"><div class="wd-exl"><span class="mx" id="gMoMx_v">--</span></div></div>
+                <div id="g_yr" class="ex-panel"><div class="wd-exl"><span class="mx" id="gYrMx_v">--</span></div></div>
+            </div>
+            <div class="wd-item" style="grid-column:1/-1;border-top:1px solid var(--brd);padding-top:8px;margin-top:2px;">
+                <div class="wd-lbl">Nome del vento</div>
+                <div class="wd-name" id="windName">--</div>
+                <div style="font-size:.58rem;color:var(--sub);margin-top:2px;" id="windNameSub"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Grafici -->
+    <div class="sec">Grafici Storici</div>
+    <div class="chart-section">
+        <div class="chart-toolbar">
+            <button class="ct-btn active" id="btn24h" onclick="setChartPeriod('24h')">Ultime 24h</button>
+            <button class="ct-btn" id="btn7d" onclick="setChartPeriod('7d')">Ultimi 7 giorni</button>
+            <button class="ct-btn" id="btn30d" onclick="setChartPeriod('30d')">30 giorni</button>
+            <button class="ct-btn" id="btnDailyAvg" style="display:none" onclick="toggleDailyAvg()">Giornaliero</button>
+            <span style="font-size:.6rem;color:var(--sub);margin-left:4px;" id="chartStatus">Caricamento...</span>
+        </div>
+        <div class="chart-grid">
+            <div class="chart-box"><div class="chart-title">🌡 Temperatura (°C)</div><div class="chart-wrap"><canvas id="chartT"></canvas></div></div>
+            <div class="chart-box"><div class="chart-title">💧 Umidita (%)</div><div class="chart-wrap"><canvas id="chartH"></canvas></div></div>
+            <div class="chart-box"><div class="chart-title">💨 Pressione s.l.m. (hPa)</div><div class="chart-wrap"><canvas id="chartP"></canvas></div></div>
+            <div class="chart-box"><div class="chart-title">🌬 Vento — Media / Raffica (km/h)</div><div class="chart-wrap"><canvas id="chartV"></canvas></div></div>
+            <div class="chart-box"><div class="chart-title">🌧 Intensita pioggia (mm/h)</div><div class="chart-wrap"><canvas id="chartRR"></canvas></div></div>
+            <div class="chart-box"><div class="chart-title">🌧 Accumulo giornaliero (mm)</div><div class="chart-wrap"><canvas id="chartR"></canvas></div></div>
+            <div class="chart-box"><div class="chart-title">☀ Radiazione (lux)</div><div class="chart-wrap"><canvas id="chartL"></canvas></div></div>
+        </div>
+    </div>
+
+    <!-- Anemometro -->
+    <div class="sec">Anemometro — Rotazioni</div>
+    <div class="anem-box">
+        <div class="lbl">Conteggio impulsi</div>
+        <div class="anem-row">
+            <div class="anem-item"><span class="anem-val" id="revTot">--</span><span class="anem-lbl">Totale da avvio</span></div>
+            <div class="anem-item"><span class="anem-val" id="rev24h">--</span><span class="anem-lbl">Ultime 24 ore</span></div>
+        </div>
+    </div>
+
+    <!-- System bar -->
+    <div class="sysbar">
+        TSL:<span id="tsl">--</span> full:<span id="full">--</span> IR:<span id="ir">--</span> Heap:<span id="heap">--</span>B &nbsp;|&nbsp; BMP: <span id="bmpStatus" class="badge bOk">OK</span> &nbsp;|&nbsp; TS ok:<span id="tsOk">--</span> fail:<span id="tsFail">--</span> last:<span id="tsCode">--</span> &nbsp;|&nbsp; Riavvii:<span id="resetCount">--</span> causa:<span id="resetReason">--</span>
+    </div>
+</div>
+
+<!-- Pioggia -->
+<div class="wrap">
+    <div class="sec">Pioggia</div>
+    <div class="grid">
+        <div class="card cr"><div class="lbl">Intensita (mm/h)</div><div class="val" id="RR">--</div><div class="unit">mm/h</div></div>
+        <div class="card cr"><div class="lbl">Oggi (mm)</div><div class="val" id="R">--</div><div class="unit">mm — reset 00:00</div></div>
+        <div class="card cr"><div class="lbl">Questo Mese (mm)</div><div class="val" id="rainMonth">--</div><div class="unit">mm</div></div>
+        <div class="card cr"><div class="lbl">Quest'Anno (mm)</div><div class="val" id="rainYear">--</div><div class="unit">mm</div></div>
+    </div>
+</div>
+
+<script>
+    // ═══════════════════════════════════════════════════════════════════
+    //  TUTTO IL JAVASCRIPT ORIGINALE CON CARATTERI UNICODE REALI
+    //  (nessuna sequenza di escape \u...)
+    // ═══════════════════════════════════════════════════════════════════
+
+    const LAT=40.014510, LON=18.169858;
+    const TS_CH=3217870, TS_RKEY='E1WOMQU43G4GNNXI';
+
+    // ─── Utility ───
+    function el(id){ return document.getElementById(id); }
+    function fmt(v,d){ if(d===undefined) d=3; if(v===null||v===undefined||isNaN(Number(v))||Number(v)<=-900) return '--'; return Number(v).toFixed(d); }
+    function safeSet(id,v){ const e=el(id); if(e) e.textContent=v; }
+    function switchTab(btn,prefix,period){ const tabs=btn.parentElement.querySelectorAll('.ex-tab'); tabs.forEach(t=>t.classList.remove('active')); btn.classList.add('active'); const parent=btn.closest('.card,.wd-item'); parent.querySelectorAll('.ex-panel').forEach(p=>p.classList.remove('show')); const target=document.getElementById(prefix+'_'+period); if(target)target.classList.add('show'); }
+    function toggleGear(){ const d=el('gearDrop'); d.classList.toggle('open'); }
+    document.addEventListener('click',function(e){ const gw=document.querySelector('.gear-wrap'); if(gw&&!gw.contains(e.target)){ const d=el('gearDrop'); if(d)d.classList.remove('open'); } });
+
+    // ─── Orologio ───
+    let serverTime = null;
+    function updateClock() {
+        if (serverTime) {
+            const now = Date.now();
+            const diff = Math.floor((now - serverTime.ts) / 1000);
+            const d = new Date(serverTime.timestamp + diff * 1000);
+            safeSet('ora', String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0'));
+        }
+    }
+    setInterval(updateClock, 1000);
+
+    // ─── Trend badge ─── (gestiti da fetchTs24h)
+    function updateTrendBadge(d){}
+    function updateTrendBadgeH(d){}
+    function updateTrendBadgeP(d){}
+
+    // ─── Funzioni per estremi da ThingSpeak ───
+    function tsDateToLocal(ca){ if(!ca||ca.length<16) return ''; const d=new Date(ca); const dd=String(d.getDate()).padStart(2,'0'); const mo=String(d.getMonth()+1).padStart(2,'0'); const hh=String(d.getHours()).padStart(2,'0'); const mm=String(d.getMinutes()).padStart(2,'0'); return dd+'/'+mo+' '+hh+':'+mm; }
+
+    function parseTsFeeds(feeds,field){
+        let mn=Infinity,mx=-Infinity,mnDt='',mxDt='';
+        feeds.forEach(f=>{
+            const v=parseFloat(f['field'+field]);
+            if(isNaN(v)) return;
+            const dt=tsDateToLocal(f.created_at);
+            if(v<mn){ mn=v; mnDt=dt; }
+            if(v>mx){ mx=v; mxDt=dt; }
+        });
+        return {mn:mn===Infinity?null:mn, mx:mx===-Infinity?null:mx, mnDt, mxDt};
+    }
+
+    function fillTsExtremes(feeds,prefix){
+        function fe(mnId,mxId,mnTid,mxTid,r){
+            if(r.mn!==null){ const e=el(mnId); if(e)e.textContent='▼ '+r.mn.toFixed(2); const t=el(mnTid); if(t)t.textContent=r.mnDt; }
+            if(r.mx!==null){ const e=el(mxId); if(e)e.textContent='▲ '+r.mx.toFixed(2); const t=el(mxTid); if(t)t.textContent=r.mxDt; }
+        }
+        const T=parseTsFeeds(feeds,1), H=parseTsFeeds(feeds,2), P=parseTsFeeds(feeds,3);
+        const V=parseTsFeeds(feeds,4), G=parseTsFeeds(feeds,5), L=parseTsFeeds(feeds,7);
+        fe('t'+prefix+'Mn_v','t'+prefix+'Mx_v','t'+prefix+'Mn_t','t'+prefix+'Mx_t',T);
+        fe('h'+prefix+'Mn_v','h'+prefix+'Mx_v','h'+prefix+'Mn_t','h'+prefix+'Mx_t',H);
+        fe('p'+prefix+'Mn_v','p'+prefix+'Mx_v','p'+prefix+'Mn_t','p'+prefix+'Mx_t',P);
+        fe('l'+prefix+'Mn_v','l'+prefix+'Mx_v','l'+prefix+'Mn_t','l'+prefix+'Mx_t',L);
+        if(V.mn!==null){ const e=el('v'+prefix+'Mn_v'); if(e)e.textContent='▼ '+V.mn.toFixed(2); }
+        if(V.mx!==null){ const e=el('v'+prefix+'Mx_v'); if(e)e.textContent='▲ '+V.mx.toFixed(2); }
+        if(G.mx!==null){ const e=el('g'+prefix+'Mx_v'); if(e)e.textContent='▲ '+G.mx.toFixed(2); }
+    }
+
+    // ─── Fetch 24h, mese, anno ───
+    function fetchTs24h(){
+        const start24 = new Date(Date.now()-24*3600*1000).toISOString();
+        const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+start24+'&end='+new Date().toISOString();
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(!data||!data.feeds||data.feeds.length===0) return;
+            const feeds=data.feeds;
+            function calcExtremes(field){
+                let mn=Infinity,mx=-Infinity,mnDt='',mxDt='';
+                feeds.forEach(f=>{
+                    const v=parseFloat(f['field'+field]);
+                    if(isNaN(v)) return;
+                    const dt=tsDateToLocal(f.created_at);
+                    if(v<mn){ mn=v; mnDt=dt; }
+                    if(v>mx){ mx=v; mxDt=dt; }
+                });
+                return {mn:mn===Infinity?null:mn, mx:mx===-Infinity?null:mx, mnDt, mxDt};
+            }
+            const T=calcExtremes(1), H=calcExtremes(2), P=calcExtremes(3), V=calcExtremes(4), G=calcExtremes(5), L=calcExtremes(7);
+            function setExt(vid,tid,sym,v,dt){
+                const ve=el(vid), te=el(tid);
+                if(!ve||!te||v===null) return;
+                ve.textContent=sym+' '+Number(v).toFixed(2);
+                const timeOnly=dt?dt.substring(dt.length-5):'';
+                te.textContent=timeOnly;
+            }
+            setExt('t24Mn_v','t24Mn_t','▼',T.mn,T.mnDt);
+            setExt('t24Mx_v','t24Mx_t','▲',T.mx,T.mxDt);
+            setExt('h24Mn_v','h24Mn_t','▼',H.mn,H.mnDt);
+            setExt('h24Mx_v','h24Mx_t','▲',H.mx,H.mxDt);
+            setExt('p24Mn_v','p24Mn_t','▼',P.mn,P.mnDt);
+            setExt('p24Mx_v','p24Mx_t','▲',P.mx,P.mxDt);
+            setExt('l24Mn_v','l24Mn_t','▼',L.mn,L.mnDt);
+            setExt('l24Mx_v','l24Mx_t','▲',L.mx,L.mxDt);
+            setExt('v24Mn_v','v24Mn_t','▼',V.mn,V.mnDt);
+            setExt('v24Mx_v','v24Mx_t','▲',V.mx,V.mxDt);
+            setExt('g24Mx_v','g24Mx_t','▲',G.mx,G.mxDt);
+
+            // Trend 1h
+            const now2=new Date();
+            const oneHourAgo=new Date(now2.getTime()-3600000);
+            const recent=feeds.filter(f=>new Date(f.created_at)>=oneHourAgo);
+            if(recent.length>=2){
+                const tFirst=parseFloat(recent[0].field1);
+                const tLast=parseFloat(recent[recent.length-1].field1);
+                if(!isNaN(tFirst)&&!isNaN(tLast)){
+                    const delta=tLast-tFirst;
+                    const b=el('trendBadge');
+                    if(b){
+                        const s=delta>=0?'+':'';
+                        const t=s+delta.toFixed(2)+'°C (1h)';
+                        if(delta>0.2){ b.className='trend-badge trend-up'; b.textContent='▲ '+t; }
+                        else if(delta<-0.2){ b.className='trend-badge trend-dn'; b.textContent='▼ '+t; }
+                        else { b.className='trend-badge trend-st'; b.textContent='▬ '+t; }
+                    }
+                }
+                const hFirst=parseFloat(recent[0].field2);
+                const hLast=parseFloat(recent[recent.length-1].field2);
+                if(!isNaN(hFirst)&&!isNaN(hLast)){
+                    const dh=hLast-hFirst;
+                    const bh=el('trendBadgeH');
+                    if(bh){
+                        const sh=dh>=0?'+':'';
+                        const th=sh+dh.toFixed(2)+'% (1h)';
+                        if(dh>2){ bh.className='trend-badge trend-up'; bh.textContent='▲ '+th; }
+                        else if(dh<-2){ bh.className='trend-badge trend-dn'; bh.textContent='▼ '+th; }
+                        else { bh.className='trend-badge trend-st'; bh.textContent='▬ '+th; }
+                    }
+                }
+                const pFirst=parseFloat(recent[0].field3);
+                const pLast=parseFloat(recent[recent.length-1].field3);
+                if(!isNaN(pFirst)&&!isNaN(pLast)){
+                    const dp=pLast-pFirst;
+                    const bp=el('trendBadgeP');
+                    if(bp){
+                        const sp=dp>=0?'+':'';
+                        const tp=sp+dp.toFixed(2)+' hPa (1h)';
+                        if(dp>0.5){ bp.className='trend-badge trend-up'; bp.textContent='▲ '+tp; }
+                        else if(dp<-0.5){ bp.className='trend-badge trend-dn'; bp.textContent='▼ '+tp; }
+                        else { bp.className='trend-badge trend-st'; bp.textContent='▬ '+tp; }
+                    }
+                }
+            }
+        }).catch(e=>console.warn('[TS 24h]',e));
+    }
+
+    let tsMonthDone=false, tsYearDone=false;
+    function fetchTsMonth(){
+        if(tsMonthDone) return;
+        const now=new Date();
+        const y=now.getFullYear(), mo=now.getMonth()+1;
+        const start=new Date(y, mo-1, 1).toISOString().split('T')[0];
+        const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+start+'T00:00:00Z&results=8000';
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(data&&data.feeds&&data.feeds.length>0){ fillTsExtremes(data.feeds,'Mo'); tsMonthDone=true; }
+        }).catch(e=>console.warn('[TS month]',e));
+    }
+    function fetchTsYear(){
+        if(tsYearDone) return;
+        const y=new Date().getFullYear();
+        const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+y+'-01-01T00:00:00Z&results=8000';
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(data&&data.feeds&&data.feeds.length>0){ fillTsExtremes(data.feeds,'Yr'); tsYearDone=true; }
+        }).catch(e=>console.warn('[TS year]',e));
+    }
+    setTimeout(fetchTsMonth, 4000);
+    setTimeout(fetchTsYear, 8000);
+    setInterval(()=>{ tsMonthDone=false; fetchTsMonth(); }, 3600000);
+    setInterval(()=>{ tsYearDone=false; fetchTsYear(); }, 3600000);
+
+    // ─── Zambretti ───
+    function fetchZambrettiTS(){
+        const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&days=2&results=500';
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(!data||!data.feeds||data.feeds.length<10){ console.warn('[Zambretti] feeds insufficienti'); return; }
+            const feeds=data.feeds;
+            const pressures=feeds.map(f=>parseFloat(f.field3)).filter(v=>!isNaN(v)&&v>800);
+            if(pressures.length<10){ console.warn('[Zambretti] pressioni <10'); return; }
+            const now=pressures.length-1;
+            const old=Math.max(0,now-30);
+            const trend=(pressures[now]-pressures[old])*6;
+            const last=pressures[now];
+            const month=new Date().getMonth()+1;
+            let p_corr=last+10;
+            if(month>=5&&month<=9) p_corr+=5;
+            let P=Math.round(p_corr*10);
+            let Z;
+            const est=(month>=6&&month<=8), inv=(month===12||month<=2);
+            if(trend>1.6){ Z=Math.round(179-(2*P)/129); if(est)Z--; if(inv)Z++; if(Z<20)Z=20; if(Z>32)Z=32; }
+            else if(trend<-1.6){ Z=Math.round(130-P/81); if(est)Z++; if(inv)Z--; if(Z<1)Z=1; if(Z>9)Z=9; }
+            else { Z=Math.round(147-(5*P)/376); if(Z<10)Z=10; if(Z>19)Z=19; }
+            if(Z<1)Z=1; if(Z>32)Z=32;
+            const table=['0','A','B','D','H','O','R','U','V','X','A','B','E','K','N','P','S','W','X','Z','A','B','C','F','G','I','J','L','M','Q','T','Y','Z'];
+            const letter=table[Z]||'-';
+            const descr=['Bello e stabile','Bello','In miglioramento','Bello ma variabile','Bello, possibili rovesci','Abbastanza bello, in migl.','Abbastanza bello, variabile','Abbastanza bello, poi piogge','Rovesci presto, poi migl.','Variabile, in miglioramento','Abbastanza bello, rovesci prob.','Instabile, poi sereno','Instabile, prob. miglioramento','Rovesci con schiarite','Rovesci, peggioramento','Variabile, qualche pioggia','Instabile, schiarite brevi','Instabile, pioggia dopo','Instabile, piogge','Molto instabile, schiarite','Piogge, peggioramento','Piogge, molto instabile','Piogge frequenti','Molto instabile, pioggia','Burrasca, poss. miglioramento','Burrasca e piogge'];
+            const idx=letter.charCodeAt(0)-65;
+            if(idx>=0&&idx<descr.length){ safeSet('zL',letter); safeSet('zD',descr[idx]); } else { safeSet('zL','-'); safeSet('zD','--'); }
+            safeSet('zT',(trend>0?'+':'')+trend.toFixed(2));
+            safeSet('zS',trend>1.6?'In salita':trend<-1.6?'In discesa':'Stabile');
+            safeSet('zH','Dati da ThingSpeak ('+pressures.length+' campioni)');
+        }).catch(e=>console.warn('[Zambretti]',e));
+    }
+    setTimeout(fetchZambrettiTS, 4000);
+    setInterval(fetchZambrettiTS, 1800000);
+
+    // ─── Pioggia mensile/annuale ───
+    function calcRainTotals(){
+        const now=new Date();
+        const y=now.getFullYear();
+        const mo=String(now.getMonth()+1).padStart(2,'0');
+        const startMonth=y+'-'+mo+'-01T00:00:00Z';
+        const startYear=y+'-01-01T00:00:00Z';
+        function sumDailyMax(feeds){
+            const days={};
+            feeds.forEach(f=>{
+                const v=parseFloat(f.field8);
+                if(isNaN(v)||v<0) return;
+                const day=f.created_at.substring(0,10);
+                if(days[day]===undefined||v>days[day]) days[day]=v;
+            });
+            return Object.values(days).reduce((a,b)=>a+b,0);
+        }
+        fetch('https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+startMonth+'&results=8000')
+            .then(r=>r.json()).then(data=>{ if(!data||!data.feeds)return; safeSet('rainMonth',sumDailyMax(data.feeds).toFixed(1)); })
+            .catch(e=>console.warn('[rainMonth]',e));
+        fetch('https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+startYear+'&results=8000')
+            .then(r=>r.json()).then(data=>{ if(!data||!data.feeds)return; safeSet('rainYear',sumDailyMax(data.feeds).toFixed(1)); })
+            .catch(e=>console.warn('[rainYear]',e));
+    }
+    setTimeout(calcRainTotals, 6000);
+    setInterval(calcRainTotals, 3600000);
+
+    // ─── Calcoli termici ───
+    function dewPoint(T,H){ const a=17.27,b=237.7; const g=a*T/(b+T)+Math.log(H/100); return b*g/(a-g); }
+    function feelsLike(T,H,V){ if(T<10&&V>4.8) return 13.12+0.6215*T-11.37*Math.pow(V,0.16)+0.3965*T*Math.pow(V,0.16); if(T>27) return -8.784695+1.61139411*T+2.3385490*H-0.14611605*T*H-0.01230809*T*T-0.01642482*H*H+0.00221173*T*T*H+0.00072546*T*H*H-0.00000358*T*T*H*H; return T; }
+
+    // ─── Vento ───
+    const WIND_MED=[
+        {n:'Tramontana',s:'N',from:348.75,to:11.25},{n:'Greco-Tramontana',s:'NNE',from:11.25,to:33.75},
+        {n:'Grecale',s:'NE',from:33.75,to:56.25},{n:'Greco-Levante',s:'ENE',from:56.25,to:78.75},
+        {n:'Levante',s:'E',from:78.75,to:101.25},{n:'Ostro-Levante',s:'ESE',from:101.25,to:123.75},
+        {n:'Scirocco',s:'SE',from:123.75,to:146.25},{n:'Ostro-Scirocco',s:'SSE',from:146.25,to:168.75},
+        {n:'Ostro',s:'S',from:168.75,to:191.25},{n:'Ostro-Libeccio',s:'SSO',from:191.25,to:213.75},
+        {n:'Libeccio',s:'SO',from:213.25,to:236.25},{n:'Ponente-Libeccio',s:'OSO',from:236.25,to:258.75},
+        {n:'Ponente',s:'O',from:258.75,to:281.25},{n:'Maestrale-Ponente',s:'ONO',from:281.25,to:303.75},
+        {n:'Maestrale',s:'NO',from:303.75,to:326.25},{n:'Tramontana-Maestrale',s:'NNO',from:326.25,to:348.75}
+    ];
+    function windMedName(deg){ const d=((deg%360)+360)%360; for(const w of WIND_MED){ if(w.from>w.to){ if(d>=w.from||d<w.to) return w; } else { if(d>=w.from&&d<w.to) return w; } } return WIND_MED[0]; }
+    function speedColor(kmh,alpha=1){ if(kmh<5) return 'rgba(144,202,249,'+alpha+')'; if(kmh<10) return 'rgba(102,187,106,'+alpha+')'; if(kmh<15) return 'rgba(255,183,77,'+alpha+')'; if(kmh<20) return 'rgba(239,83,80,'+alpha+')'; return 'rgba(186,104,200,'+alpha+')'; }
+
+    // ─── Sole ───
+    function sunCalc(lat,lon){
+        const tzOff=-new Date().getTimezoneOffset()/60;
+        const now=new Date();
+        const jd=now/86400000+2440587.5,n=Math.floor(jd-2451545+0.5);
+        const L=((280.46+0.9856474*n)%360+360)%360;
+        const g=((357.528+0.9856003*n)%360+360)%360;
+        const lam=L+1.915*Math.sin(g*Math.PI/180)+0.02*Math.sin(2*g*Math.PI/180);
+        const ep=23.439-0.0000004*n;
+        const sinDec=Math.sin(ep*Math.PI/180)*Math.sin(lam*Math.PI/180);
+        const dec=Math.asin(sinDec)*180/Math.PI;
+        const eot=(-1.915*Math.sin(g*Math.PI/180)-0.02*Math.sin(2*g*Math.PI/180)+2.466*Math.sin(2*lam*Math.PI/180)-0.053*Math.sin(4*lam*Math.PI/180))*4;
+        const noon=720-4*lon-eot;
+        const utcNow=now.getUTCHours()*60+now.getUTCMinutes()+now.getUTCSeconds()/60;
+        const haRad=(utcNow-noon)/4*Math.PI/180;
+        const latR=lat*Math.PI/180,decR=dec*Math.PI/180;
+        const sinEl=Math.sin(latR)*Math.sin(decR)+Math.cos(latR)*Math.cos(decR)*Math.cos(haRad);
+        const elev=Math.asin(sinEl)*180/Math.PI;
+        function haForAngle(ang){ const c=(Math.sin(ang*Math.PI/180)-Math.sin(latR)*Math.sin(decR))/(Math.cos(latR)*Math.cos(decR)); if(c<-1||c>1) return null; return Math.acos(c)*180/Math.PI; }
+        function toHHMM(m){ if(m===null) return '--'; const mm=Math.round(m+tzOff*60); const h=Math.floor(((mm%1440)+1440)%1440/60); const mi=((mm%60)+60)%60; return String(h).padStart(2,'0')+':'+String(mi).padStart(2,'0'); }
+        function toMin(m){ if(m===null) return null; return Math.round(m+tzOff*60); }
+        const ha0=haForAngle(-0.833), rMin=ha0!==null?noon-ha0*4:null, sMin=ha0!==null?noon+ha0*4:null;
+        const haC=haForAngle(-6), haN=haForAngle(-12), haA=haForAngle(-18);
+        return { rise:toHHMM(rMin), set:toHHMM(sMin), rMin:toMin(rMin), sMin:toMin(sMin), elev,
+            twC:{r:toHHMM(haC!==null?noon-haC*4:null),s:toHHMM(haC!==null?noon+haC*4:null)},
+            twN:{r:toHHMM(haN!==null?noon-haN*4:null),s:toHHMM(haN!==null?noon+haN*4:null)},
+            twA:{r:toHHMM(haA!==null?noon-haA*4:null),s:toHHMM(haA!==null?noon+haA*4:null),rMin:toMin(haA!==null?noon-haA*4:null),sMin:toMin(haA!==null?noon+haA*4:null)}
+        };
+    }
+
+    // ─── Luna ───
+    function moonCalc(lat, lon) {
+        const tzOff = -new Date().getTimezoneOffset() / 60;
+        const now = new Date();
+        const JD = now / 86400000 + 2440587.5;
+        const T = (JD - 2451545.0) / 36525;
+        const D = (297.85036 + 445267.111480 * T - 0.0019142 * T * T) * Math.PI / 180;
+        const M = (134.96298 + 477198.867398 * T + 0.0086972 * T * T) * Math.PI / 180;
+        const Mprime = (357.52910 + 35999.050290 * T - 0.0001536 * T * T) * Math.PI / 180;
+        const F = (93.27283 + 483202.018538 * T - 0.003682 * T * T) * Math.PI / 180;
+        let L = 218.3164477 + 481267.88123421 * T - 0.0015786 * T * T + T*T*T/538841 - T*T*T*T/65194000;
+        L += 6.289 * Math.sin(M) + 1.274 * Math.sin(2*D - M) + 0.658 * Math.sin(2*D) + 0.214 * Math.sin(2*M);
+        L += 0.186 * Math.sin(Mprime) + 0.114 * Math.sin(2*F) + 0.059 * Math.sin(2*D - 2*M);
+        L += 0.058 * Math.sin(2*D - 2*F) + 0.057 * Math.sin(D - M - F) + 0.054 * Math.sin(M + F);
+        L = ((L % 360) + 360) % 360;
+        let B = 5.128 * Math.sin(F) + 0.281 * Math.sin(M + F) + 0.278 * Math.sin(F - M);
+        B += 0.174 * Math.sin(F - 2*D) + 0.111 * Math.sin(2*D + F - 2*M);
+        B += 0.104 * Math.sin(2*D - F) + 0.091 * Math.sin(2*D - M - F);
+        B = ((B % 360) + 360) % 360;
+        if (B > 180) B -= 360;
+        const dist = 1.0 / (0.999953 + 0.012455 * Math.cos(D) + 0.001357 * Math.cos(2*D - M) + 0.000337 * Math.cos(2*D) + 0.000139 * Math.cos(M) + 0.000096 * Math.cos(2*M));
+        const epsilon = (23.439291 - 0.0130042 * T) * Math.PI / 180;
+        const Lrad = L * Math.PI / 180;
+        const Brad = B * Math.PI / 180;
+        let RA = Math.atan2(Math.sin(Lrad)*Math.cos(epsilon) - Math.tan(Brad)*Math.sin(epsilon), Math.cos(Lrad)) * 180 / Math.PI;
+        RA = ((RA % 360) + 360) % 360;
+        let Dec = Math.asin(Math.sin(Brad)*Math.cos(epsilon) + Math.cos(Brad)*Math.sin(epsilon)*Math.sin(Lrad)) * 180 / Math.PI;
+        Dec = ((Dec % 360) + 360) % 360;
+        if (Dec > 180) Dec -= 360;
+        function calcolaAltezza(RA, Dec, lat, lon, utcHour) {
+            const GMST = (100.46061837 + 36000.770053608 * T + 0.000387933 * T * T) % 360;
+            const LST = ((GMST + lon + utcHour * 360 / 24) % 360 + 360) % 360;
+            const HA = (LST - RA) * Math.PI / 180;
+            const latR = lat * Math.PI / 180;
+            const decR = Dec * Math.PI / 180;
+            let alt = Math.asin(Math.sin(latR)*Math.sin(decR) + Math.cos(latR)*Math.cos(decR)*Math.cos(HA)) * 180 / Math.PI;
+            if (alt > -5 && alt < 10) {
+                const A = alt + 10.3/(alt+5.11);
+                alt += 1.02/Math.tan(A*Math.PI/180)/60;
+            }
+            return alt;
+        }
+        function trovaEvento(RA, Dec, lat, lon, tipo) {
+            const step = 0.25;
+            const soglia = -0.833 - 0.25;
+            let altPrev = calcolaAltezza(RA, Dec, lat, lon, 0);
+            for (let h = step; h <= 24; h += step) {
+                const altCurr = calcolaAltezza(RA, Dec, lat, lon, h);
+                const isRise = (altPrev < soglia && altCurr > soglia);
+                const isSet = (altPrev > soglia && altCurr < soglia);
+                if ((tipo === 'rise' && isRise) || (tipo === 'set' && isSet)) {
+                    let ora = (h - step) + (soglia - altPrev) / (altCurr - altPrev) * step;
+                    for (let it = 0; it < 5; it++) {
+                        const a = calcolaAltezza(RA, Dec, lat, lon, ora);
+                        const aP = calcolaAltezza(RA, Dec, lat, lon, ora + 0.01);
+                        const deriv = (aP - a) / 0.01;
+                        if (Math.abs(deriv) > 0.00001) ora = ora - (a - soglia) / deriv;
+                    }
+                    return Math.min(24, Math.max(0, ora));
+                }
+                altPrev = altCurr;
+            }
+            return null;
+        }
+        let rise = trovaEvento(RA, Dec, lat, lon, 'rise');
+        let set = trovaEvento(RA, Dec, lat, lon, 'set');
+        const nowUTC = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+        const elev = calcolaAltezza(RA, Dec, lat, lon, nowUTC);
+        const sunLon = 280.46 + 0.9856474 * (JD - 2451545);
+        const moonLon = L;
+        const elongation = ((moonLon - sunLon) % 360 + 360) % 360;
+        let idx;
+        if (elongation < 15 || elongation > 345) idx = 0;
+        else if (elongation < 75) idx = 1;
+        else if (elongation < 105) idx = 2;
+        else if (elongation < 165) idx = 3;
+        else if (elongation < 195) idx = 4;
+        else if (elongation < 255) idx = 5;
+        else if (elongation < 285) idx = 6;
+        else idx = 7;
+        const phases = [ { icon: '🌑', name: 'Luna Nuova' }, { icon: '🌒', name: 'Falce Crescente' }, { icon: '🌓', name: 'Primo Quarto' }, { icon: '🌔', name: 'Gibbosa Crescente' }, { icon: '🌕', name: 'Luna Piena' }, { icon: '🌖', name: 'Gibbosa Calante' }, { icon: '🌗', name: 'Ultimo Quarto' }, { icon: '🌘', name: 'Falce Calante' } ];
+        const phase = phases[idx];
+        function toHM(h) { if (h === null) return '--'; const tot = ((Math.round((h + tzOff) * 60) % 1440) + 1440) % 1440; return String(Math.floor(tot / 60)).padStart(2, '0') + ':' + String(tot % 60).padStart(2, '0'); }
+        return { icon: phase.icon, phaseName: phase.name, rise: toHM(rise), set: toHM(set), elev: elev, constellation: getConstellation(moonLon) };
+    }
+    function getConstellation(lon){ const l=((lon%360)+360)%360; if(l<30)return 'Ariete'; if(l<60)return 'Toro'; if(l<90)return 'Gemelli'; if(l<120)return 'Cancro'; if(l<150)return 'Leone'; if(l<180)return 'Vergine'; if(l<210)return 'Bilancia'; if(l<240)return 'Scorpione'; if(l<270)return 'Ofiuco'; if(l<300)return 'Sagittario'; if(l<330)return 'Capricorno'; return 'Acquario'; }
+
+    function updateSun(){
+        const s=sunCalc(LAT,LON);
+        safeSet('SR',s.rise); safeSet('SS',s.set); safeSet('sunElev',fmt(s.elev,1));
+        const now=new Date(), nowMin=now.getHours()*60+now.getMinutes();
+        const dayL=(s.sMin&&s.rMin)?s.sMin-s.rMin:0;
+        if(dayL>0) el('sunFill').style.width=Math.min(100,Math.max(0,(nowMin-s.rMin)/dayL*100))+'%';
+        let evtMin, evtLabel;
+        if(s.rMin&&nowMin<s.rMin){ evtMin=s.rMin-nowMin; evtLabel='Alba'; } else if(s.sMin&&nowMin<s.sMin){ evtMin=s.sMin-nowMin; evtLabel='Tramonto'; } else { evtMin=s.rMin?1440-nowMin+s.rMin:0; evtLabel='Alba (domani)'; }
+        const eh=Math.floor(evtMin/60), em=Math.round(evtMin%60);
+        safeSet('nextEvtLabel',evtLabel); safeSet('nextEvtSub','tra '+eh+'h '+em+'m');
+        safeSet('twC_r',s.twC.r); safeSet('twC_s',s.twC.s);
+        safeSet('twN_r',s.twN.r); safeSet('twN_s',s.twN.s);
+        safeSet('twA_r',s.twA.r); safeSet('twA_s',s.twA.s);
+        const isDay=s.rMin&&s.sMin&&nowMin>=s.rMin&&nowMin<s.sMin;
+        safeSet('phaseName',isDay?'Giorno (sole visibile)':'Notte / crepuscolo');
+        if(s.twA.s&&s.twA.r&&s.twA.s!=='--'&&s.twA.r!=='--') safeSet('astroNight','★ Notte astronomica: '+s.twA.s+' → '+s.twA.r);
+        else safeSet('astroNight','');
+    }
+
+    function updateMoon(){
+        const m=moonCalc(LAT,LON);
+        safeSet('moonIcon',m.icon); safeSet('moonPhase',m.phaseName); safeSet('MR',m.rise); safeSet('MS',m.set); safeSet('moonElev',fmt(m.elev,1)); safeSet('moonConst',m.constellation);
+        const now=new Date(); const nowMin=now.getHours()*60+now.getMinutes();
+        const rP=m.rise.split(':'), sP=m.set.split(':');
+        if(rP.length<2||sP.length<2){ safeSet('moonNextLabel','--'); return; }
+        const rMin=parseInt(rP[0])*60+parseInt(rP[1]), sMin=parseInt(sP[0])*60+parseInt(sP[1]);
+        let diffR=rMin-nowMin; if(diffR<0)diffR+=1440;
+        let diffS=sMin-nowMin; if(diffS<0)diffS+=1440;
+        let mEvtMin, mEvtLabel;
+        if(diffR<=diffS){ mEvtMin=diffR; mEvtLabel=(rMin>nowMin)?'Sorge':'Sorge (domani)'; } else { mEvtMin=diffS; mEvtLabel=(sMin>nowMin)?'Tramonta':'Tramonta (domani)'; }
+        const mh=Math.floor(mEvtMin/60), mm2=Math.round(mEvtMin%60);
+        safeSet('moonNextLabel',mEvtLabel); safeSet('moonNextSub','tra '+mh+'h '+mm2+'m');
+    }
+
+    setInterval(updateSun, 30000);
+    setInterval(updateMoon, 60000);
+
+    // ─── Rosa dei venti ───
+    let windDirHistory=[], windSpeedHistory=[];
+    let windMode='both';
+    const WR_HIST_MAX=120;
+    let lastDir=0, lastSpeed=0;
+
+    function setWindMode(m){
+        windMode=m;
+        ['arrow','radar','both'].forEach(n=>{ const b=el('wrBtn'+n.charAt(0).toUpperCase()+n.slice(1)); if(b)b.classList.toggle('active',n===m); });
+        drawCompass(lastDir,lastSpeed);
+    }
+
+    function drawCompass(dir,speed){
+        lastDir=dir; lastSpeed=speed;
+        const c=el('cmp'); if(!c) return;
+        const ctx=c.getContext('2d'), W=c.width, H=c.height, cx=W/2, cy=H/2, R=W/2-4;
+        ctx.clearRect(0,0,W,H);
+        const bg=ctx.createRadialGradient(cx,cy,R*0.2,cx,cy,R);
+        bg.addColorStop(0,'#1e2d3d'); bg.addColorStop(1,'#0d1117');
+        ctx.beginPath(); ctx.arc(cx,cy,R,0,2*Math.PI); ctx.fillStyle=bg; ctx.fill();
+        ctx.beginPath(); ctx.arc(cx,cy,R,0,2*Math.PI); ctx.strokeStyle='#58a6ff'; ctx.lineWidth=2; ctx.stroke();
+        if(windMode==='radar'||windMode==='both'){
+            const sectors=new Array(36).fill(0);
+            const counts=new Array(36).fill(0);
+            for(let i=0;i<windDirHistory.length;i++){
+                const d=((windDirHistory[i]%360)+360)%360;
+                const s=Math.floor(d/10)%36;
+                sectors[s]+=windSpeedHistory[i]||0;
+                counts[s]++;
+            }
+            const maxSec=Math.max(...sectors.map((s,i)=>counts[i]>0?s/counts[i]:0),1);
+            for(let i=0;i<36;i++){
+                if(counts[i]===0) continue;
+                const avgSpd=sectors[i]/counts[i];
+                const frac=avgSpd/maxSec;
+                const r0=R*0.15, r1=R*0.15+frac*(R*0.72);
+                const a0=(i*10-90-5)*Math.PI/180, a1=(i*10-90+5)*Math.PI/180;
+                ctx.beginPath(); ctx.moveTo(cx+Math.cos(a0)*r0,cy+Math.sin(a0)*r0);
+                ctx.arc(cx,cy,r1,a0,a1);
+                ctx.arc(cx,cy,r0,a1,a0,true);
+                ctx.closePath();
+                ctx.fillStyle=speedColor(avgSpd,0.55);
+                ctx.fill();
+            }
+        }
+        ctx.beginPath(); ctx.arc(cx,cy,R*0.72,0,2*Math.PI); ctx.strokeStyle='#30363d'; ctx.lineWidth=1; ctx.stroke();
+        for(let i=0;i<36;i++){ const a=i*10*Math.PI/180-Math.PI/2, big=i%3===0; const r0=big?R*0.76:R*0.84, r1=R*0.97; ctx.beginPath(); ctx.moveTo(cx+Math.cos(a)*r0,cy+Math.sin(a)*r0); ctx.lineTo(cx+Math.cos(a)*r1,cy+Math.sin(a)*r1); ctx.strokeStyle=big?'#8b949e':'#30363d'; ctx.lineWidth=big?1.3:0.7; ctx.stroke(); }
+        ctx.font='bold 11px Inter,sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        [['N',0],['E',90],['S',180],['O',270]].forEach(([l,d])=>{ const a=(d-90)*Math.PI/180,r2=R*0.58; ctx.fillStyle=l==='N'?'#f85149':'#cdd9e5'; ctx.fillText(l,cx+Math.cos(a)*r2,cy+Math.sin(a)*r2); });
+        [['NE',45],['SE',135],['SO',225],['NO',315]].forEach(([l,d])=>{ const a=(d-90)*Math.PI/180; ctx.font='bold 7px Inter,sans-serif'; ctx.fillStyle='#8b949e'; ctx.fillText(l,cx+Math.cos(a)*R*0.58,cy+Math.sin(a)*R*0.58); });
+        if(windMode==='arrow'||windMode==='both'){
+            const arrowColor=speedColor(speed);
+            ctx.save(); ctx.translate(cx,cy); ctx.rotate(dir*Math.PI/180);
+            const aLen=R*0.50;
+            ctx.beginPath(); ctx.moveTo(0,aLen); ctx.lineTo(0,-aLen+20); ctx.strokeStyle=arrowColor; ctx.lineWidth=3; ctx.lineCap='round'; ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0,-aLen); ctx.lineTo(-9,-aLen+18); ctx.lineTo(9,-aLen+18); ctx.closePath(); ctx.fillStyle=arrowColor; ctx.fill();
+            ctx.beginPath(); ctx.moveTo(0,aLen); ctx.lineTo(0,R*0.28); ctx.strokeStyle='#e3b341'; ctx.lineWidth=3.5; ctx.lineCap='round'; ctx.stroke();
+            ctx.restore();
+        }
+        ctx.beginPath(); ctx.arc(cx,cy,5,0,2*Math.PI); ctx.fillStyle='#58a6ff'; ctx.fill(); ctx.strokeStyle='#0d1117'; ctx.lineWidth=1.5; ctx.stroke();
+    }
+
+    // ─── Grafici con Chart.js ───
+    let charts={};
+    function buildCharts(feeds, period) {
+        if (!feeds || feeds.length === 0) { safeSet('chartStatus', 'Nessun dato'); return; }
+        function toTimeSeries(field) {
+            return feeds.map(function(f) {
+                var v = parseFloat(f['field' + field]);
+                return { x: new Date(f.created_at).getTime(), y: (isNaN(v) || v === null) ? null : v };
+            });
+        }
+        function makeDataset(data, color, label) {
+            return { label: label, data: data, borderColor: color, backgroundColor: 'transparent', borderWidth: 2, spanGaps: true, pointRadius: 0, pointHoverRadius: 8, pointHitRadius: 12, fill: false };
+        }
+        function baseOpts(yLabel) {
+            return {
+                responsive: true, maintainAspectRatio: false, animation: { duration: 300 },
+                plugins: {
+                    legend: { labels: { color: '#8b949e', font: { size: 10 }, boxWidth: 12, padding: 8 } },
+                    tooltip: { backgroundColor: '#161b22', borderColor: '#30363d', borderWidth: 1, titleColor: '#e6edf3', bodyColor: '#8b949e' },
+                    datalabels: { display: false }
+                },
+                scales: {
+                    x: { type: 'time', time: { displayFormats: { hour: 'HH:mm', day: 'dd/MM' }, tooltipFormat: 'dd/MM/yyyy HH:mm' }, ticks: { color: '#8b949e', font: { size: 9 }, maxTicksLimit: 10, maxRotation: 0 }, grid: { color: '#1c2430' }, border: { color: '#30363d' } },
+                    y: { ticks: { color: '#8b949e', font: { size: 9 } }, grid: { color: '#1c2430' }, border: { color: '#30363d' }, title: { display: true, text: yLabel, color: '#8b949e', font: { size: 9 } } }
+                }
+            };
+        }
+        var tData = toTimeSeries(1);
+        var hData = toTimeSeries(2);
+        var pDataRaw = toTimeSeries(3);
+        var pData = pDataRaw.map(function(p,i){ if(p.y===null||p.y<940||p.y>1050) return {x:p.x,y:null}; if(i>0){var prev=pDataRaw[i-1].y; if(prev!==null && Math.abs(p.y-prev)>3) return {x:p.x,y:null};} return p; });
+        var vData = toTimeSeries(4);
+        var gData = toTimeSeries(5);
+        var lData = toTimeSeries(7).map(function(p){ return { x: p.x, y: (p.y===null)?null:Math.max(p.y,0.01) }; });
+        var rData = toTimeSeries(8);
+        makeChart('chartT', 'line', [makeDataset(tData, '#58a6ff', 'Temperatura')], null, baseOpts('°C'));
+        makeChart('chartH', 'line', [makeDataset(hData, '#3fb950', 'Umidità')], null, baseOpts('%'));
+        makeChart('chartP', 'line', [makeDataset(pData, '#c084fc', 'Pressione slm')], null, baseOpts('hPa'));
+        makeChart('chartV', 'line', [makeDataset(vData, '#3fb950', 'Media'), makeDataset(gData, '#e3b341', 'Raffica')], null, baseOpts('km/h'));
+        var lOpts = baseOpts('lux (log)'); lOpts.scales.y.type='logarithmic'; lOpts.scales.y.min=0.01;
+        makeChart('chartL', 'line', [makeDataset(lData, '#f59e0b', 'Luce')], null, lOpts);
+        makeChart('chartR', 'line', [makeDataset(rData, '#60a5fa', 'Accumulo mm')], null, baseOpts('mm'));
+        var rrData = [];
+        for (var i = 1; i < rData.length; i++) {
+            var prev = rData[i - 1];
+            var curr = rData[i];
+            if (prev === null || curr === null || prev.y === null || curr.y === null) { rrData.push({ x: curr.x, y: 0 }); continue; }
+            var diff = curr.y - prev.y;
+            if (diff < 0) diff = 0;
+            var dt = (curr.x - prev.x) / 3600000;
+            rrData.push({ x: curr.x, y: dt > 0 ? diff / dt : 0 });
+        }
+        makeChart('chartRR', 'bar', [{ label: 'Intensità mm/h', data: rrData, backgroundColor: 'rgba(96,165,250,0.5)', borderColor: '#60a5fa', borderWidth: 1 }], null, baseOpts('mm/h'));
+        safeSet('chartStatus', 'Aggiornato: ' + feeds.length + ' campioni');
+    }
+
+    function makeChart(id, type, datasets, xLabels, opts) {
+        if(charts[id]){ charts[id].data.labels=xLabels; charts[id].data.datasets=datasets; charts[id].options=opts; charts[id].update('none'); return; }
+        const ctx2=document.getElementById(id); if(!ctx2) return;
+        charts[id]=new Chart(ctx2, { type, data:{labels:xLabels,datasets}, options:opts });
+    }
+
+    // ─── Fetch ThingSpeak per grafici (con chunk) ───
+    function fetchThingSpeakChunk(start, end, average) {
+        var url = 'https://api.thingspeak.com/channels/' + TS_CH + '/feeds.json?api_key=' + TS_RKEY + '&start=' + start.toISOString() + '&end=' + end.toISOString();
+        if (average) url += '&average=' + average;
+        return fetch(url).then(function(r) { return r.json(); }).then(function(data) { return (data && data.feeds) ? data.feeds : []; }).catch(function() { return []; });
+    }
+    function fetchThingSpeakRange(totalStart, totalEnd, average, chunkDays) {
+        var chunks = [];
+        var cursor = new Date(totalStart);
+        while (cursor < totalEnd) {
+            var chunkEnd = new Date(cursor);
+            chunkEnd.setDate(chunkEnd.getDate() + chunkDays);
+            if (chunkEnd > totalEnd) chunkEnd = new Date(totalEnd);
+            chunks.push(fetchThingSpeakChunk(new Date(cursor), chunkEnd, average));
+            cursor = chunkEnd;
+        }
+        return Promise.all(chunks).then(function(results) {
+            var merged = [].concat.apply([], results);
+            merged.sort(function(a, b) { return new Date(a.created_at) - new Date(b.created_at); });
+            var seen = {};
+            return merged.filter(function(f) {
+                if (seen[f.created_at]) return false;
+                seen[f.created_at] = true;
+                return true;
+            });
+        });
+    }
+
+    let chartPeriod='24h';
+    let dailyAvgMode=false;
+    function aggregateDaily(feeds){ const days={}; feeds.forEach(f=>{ const day=f.created_at.substring(0,10); if(!days[day])days[day]={sum:{},cnt:{},created_at:day+'T12:00:00Z'}; [1,2,3,4,5,7,8].forEach(fld=>{ const v=parseFloat(f['field'+fld]); if(!isNaN(v)){ days[day].sum[fld]=(days[day].sum[fld]||0)+v; days[day].cnt[fld]=(days[day].cnt[fld]||0)+1; } }); }); return Object.keys(days).sort().map(day=>{ const d=days[day]; const feed={created_at:d.created_at}; [1,2,3,4,5,7,8].forEach(fld=>{ feed['field'+fld]=d.cnt[fld]?(d.sum[fld]/d.cnt[fld]):null; }); return feed; }); }
+    function toggleDailyAvg(){ dailyAvgMode=!dailyAvgMode; const b=el('btnDailyAvg'); if(b)b.classList.toggle('active',dailyAvgMode); loadCharts(chartPeriod); }
+
+    function loadCharts(period) {
+        safeSet('chartStatus', 'Caricamento...');
+        var end = new Date();
+        var start = new Date();
+        var average = null;
+        if (period === '24h') { start.setHours(start.getHours() - 24); }
+        else if (period === '7d') { start.setDate(start.getDate() - 7); average = 10; }
+        else if (period === '30d') { start.setDate(start.getDate() - 30); average = 60; }
+        fetchThingSpeakRange(start, end, average, 4).then(function(feeds) {
+            if (!feeds || feeds.length === 0) { safeSet('chartStatus', 'Errore: nessun dato'); return; }
+            if (period === '30d' && dailyAvgMode) feeds = aggregateDaily(feeds);
+            buildCharts(feeds, period);
+        }).catch(function(e) { safeSet('chartStatus', 'Errore caricamento'); console.warn(e); });
+    }
+
+    function setChartPeriod(p){
+        chartPeriod=p;
+        el('btn24h').classList.toggle('active',p==='24h');
+        el('btn7d').classList.toggle('active',p==='7d');
+        el('btn30d').classList.toggle('active',p==='30d');
+        const dailyBtn=el('btnDailyAvg');
+        if(dailyBtn){ dailyBtn.style.display=(p==='30d')?'inline-block':'none'; }
+        loadCharts(p);
+    }
+    setInterval(()=>loadCharts(chartPeriod), 60000);
+
+    // ─── LIVE DATA: ultimo feed da ThingSpeak ───
+    function fetchLiveData(){
+        const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds/last.json?api_key='+TS_RKEY;
+        fetch(url).then(r=>r.json()).then(feed=>{
+            if(!feed || !feed.field1) return;
+            const d = {};
+            d.T = parseFloat(feed.field1);
+            d.H = parseFloat(feed.field2);
+            d.Pslp = parseFloat(feed.field3);
+            d.P = parseFloat(feed.field3);
+            d.V = parseFloat(feed.field4) || 0;
+            d.G = parseFloat(feed.field5) || 0;
+            d.D = parseFloat(feed.field6) || 0;
+            d.L = parseFloat(feed.field7) || 0;
+            d.R = parseFloat(feed.field8) || 0;
+            d.RR = 0;
+            d.fw = 'Standalone';
+            d.rssi = '--';
+            d.svr_ts = new Date(feed.created_at).getTime()/1000;
+            if(feed.created_at){
+                const t = new Date(feed.created_at).getTime();
+                serverTime = { ts: Date.now(), timestamp: t };
+            }
+            safeSet('T', fmt(d.T));
+            safeSet('H', fmt(d.H));
+            safeSet('Pslp', fmt(d.Pslp));
+            safeSet('P', fmt(d.P));
+            safeSet('L', fmt(d.L));
+            safeSet('V', fmt(d.V));
+            safeSet('G', fmt(d.G));
+            safeSet('D', fmt(d.D,0));
+            safeSet('R', fmt(d.R));
+            safeSet('fw', d.fw);
+            safeSet('rssi', d.rssi);
+            if(d.T>-900 && d.H>0){
+                safeSet('FL', fmt(feelsLike(d.T,d.H,d.V)));
+                safeSet('DP', fmt(dewPoint(d.T,d.H)));
+            }
+            const wm = windMedName(d.D||0);
+            safeSet('windDirName', wm.n);
+            safeSet('windName', wm.n);
+            safeSet('windNameSub', wm.s+' — '+fmt(d.D,0)+'°');
+            const da = el('DA');
+            if(da){ da.textContent='N/A'; da.className='badge bLo'; }
+            windDirHistory.push(d.D||0);
+            windSpeedHistory.push(d.V||0);
+            if(windDirHistory.length>WR_HIST_MAX){ windDirHistory.shift(); windSpeedHistory.shift(); }
+            drawCompass(d.D||0, d.V||0);
+            const ago = Math.round((Date.now() - (serverTime?serverTime.timestamp:Date.now()))/1000);
+            safeSet('updAgo', ago+'s fa');
+            safeSet('tsl', '--');
+            safeSet('full', '--');
+            safeSet('ir', '--');
+            safeSet('heap', '--');
+            safeSet('bmpStatus', 'OK');
+            safeSet('bmpStatus', 'bOk');
+            safeSet('tsOk', '--');
+            safeSet('tsFail', '--');
+            safeSet('tsCode', '--');
+            safeSet('resetCount', '--');
+            safeSet('resetReason', 'Standalone');
+            safeSet('revTot', '--');
+            safeSet('rev24h', '--');
+        }).catch(e=>console.warn('[live]',e));
+    }
+
+    // ─── Avvia tutto ───
+    setTimeout(fetchLiveData, 1000);
+    setInterval(fetchLiveData, 15000);
+    setTimeout(()=>{ loadCharts('24h'); fetchTs24h(); fetchZambrettiTS(); }, 3000);
+    setInterval(fetchTs24h, 600000);
+    setTimeout(updateSun, 500);
+    setTimeout(updateMoon, 1000);
+</script>
+</body>
+</html>
