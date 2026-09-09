@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stazione Casa</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0d1117;--bg2:#161b22;--bg3:#1c2430;--brd:#30363d;--acc:#58a6ff;--grn:#3fb950;--ylw:#d29922;--red:#f85149;--orn:#e3b341;--txt:#e6edf3;--sub:#8b949e;--val:#cdd9e5;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--txt);padding:0 0 76px;}
+.hdr{background:var(--bg2);border-bottom:1px solid var(--brd);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}
+.hdr-name{font-size:1rem;font-weight:700;color:var(--acc);}
+.hdr-loc{font-size:.7rem;color:var(--sub);font-family:'JetBrains Mono',monospace;}
+.hdr-r{text-align:right;font-size:.65rem;color:var(--sub);font-family:'JetBrains Mono',monospace;}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--grn);margin-right:3px;animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.wrap{max-width:960px;margin:0 auto;padding:12px 10px 0;}
+.sec{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--sub);margin:14px 0 7px;padding-left:2px;}
+.grid{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));}
+.card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:11px 13px;}
+.lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sub);margin-bottom:4px;}
+.val{font-size:1.75rem;font-weight:700;color:var(--grn);font-family:'JetBrains Mono',monospace;line-height:1;}
+.unit{font-size:.62rem;color:var(--sub);margin-top:3px;}
+.ex-tabs{display:flex;gap:4px;margin-top:8px;}
+.ex-tab{background:var(--bg3);border:1px solid var(--brd);color:var(--sub);font-size:.6rem;padding:3px 8px;border-radius:6px;cursor:pointer;}
+.ex-tab.active{color:var(--acc);border-color:var(--acc);}
+.ex-panel{display:none;margin-top:6px;}
+.ex-panel.show{display:block;}
+.ex-row{display:flex;justify-content:space-between;font-size:.72rem;}
+.emn{color:#60a5fa;font-weight:600;font-family:'JetBrains Mono',monospace;}
+.emx{color:var(--orn);font-weight:600;font-family:'JetBrains Mono',monospace;}
+.et{display:block;font-size:.6rem;color:var(--sub);margin-top:1px;}
+.pbtns{display:flex;gap:6px;margin-top:6px;}
+.pbtn{background:var(--bg3);border:1px solid var(--brd);color:var(--sub);font-size:.6rem;padding:4px 9px;border-radius:6px;cursor:pointer;}
+.pbtn.active{color:var(--acc);border-color:var(--acc);}
+.hero{grid-column:1/-1;border-color:var(--acc);padding:16px;}
+.hero-val{font-size:1.3rem;font-weight:700;color:var(--val);font-family:'JetBrains Mono',monospace;}
+.note{font-size:.62rem;color:var(--sub);margin:10px 0;font-style:italic;line-height:1.5;}
+.chart-toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;}
+.ct-btn{background:var(--bg3);border:1px solid var(--brd);color:var(--sub);font-size:.68rem;padding:6px 11px;border-radius:8px;cursor:pointer;}
+.ct-btn.active{color:var(--acc);border-color:var(--acc);}
+.chart-grid{display:grid;gap:10px;grid-template-columns:1fr;}
+.chart-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:0;}
+.chart-title{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin-bottom:8px;}
+.chart-wrap{position:relative;height:220px;}
+.pagenav{position:fixed;left:0;right:0;bottom:0;background:var(--bg2);border-top:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between;padding:10px 6px;z-index:200;}
+.pagenav-btn{background:var(--bg3);border:1px solid var(--brd);color:var(--acc);font-size:1.4rem;line-height:1;padding:8px 18px;border-radius:8px;text-decoration:none;user-select:none;}
+.pagenav-label{font-size:.72rem;color:var(--sub);text-align:center;flex:1;}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+    <div>
+        <div class="hdr-name">🏠 Stazione Casa</div>
+        <div class="hdr-loc">Interno · confronto con Tetto</div>
+    </div>
+    <div class="hdr-r"><span class="dot"></span><span id="updAgo">--</span> fa</div>
+</div>
+
+<div class="wrap">
+    <div class="sec">Ultimo rilievo</div>
+    <div class="grid">
+        <div class="card">
+            <div class="lbl">Temperatura</div>
+            <div class="val" id="T">--</div>
+            <div class="unit">°C</div>
+            <div class="ex-tabs">
+                <button class="ex-tab active" onclick="switchTab(this,'t','mo')">Mese</button>
+                <button class="ex-tab" onclick="switchTab(this,'t','yr')">Anno</button>
+            </div>
+            <div id="t_mo" class="ex-panel show"><div class="ex-row"><span class="emn" id="tMoMn_v">--</span><span class="emx" id="tMoMx_v">--</span></div><div class="ex-row"><span class="et" id="tMoMn_t"></span><span class="et" id="tMoMx_t"></span></div></div>
+            <div id="t_yr" class="ex-panel"><div class="ex-row"><span class="emn" id="tYrMn_v">--</span><span class="emx" id="tYrMx_v">--</span></div><div class="ex-row"><span class="et" id="tYrMn_t"></span><span class="et" id="tYrMx_t"></span></div></div>
+        </div>
+        <div class="card">
+            <div class="lbl">Umidità</div>
+            <div class="val" id="H">--</div>
+            <div class="unit">%</div>
+        </div>
+        <div class="card">
+            <div class="lbl">Pressione</div>
+            <div class="val" id="P">--</div>
+            <div class="unit" id="Pmode">hPa (livello del mare)</div>
+            <div class="pbtns">
+                <button class="pbtn active" id="pbSlm" onclick="setPressMode('slm')">Livello mare</button>
+                <button class="pbtn" id="pbRaw" onclick="setPressMode('raw')">Raw (stazione)</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="sec">Confronto con il Tetto (esterno)</div>
+    <div class="grid">
+        <div class="card hero">
+            <div class="lbl" id="deltaLabel">In attesa dati...</div>
+            <div class="hero-val" id="deltaText">--</div>
+        </div>
+    </div>
+
+    <div class="sec">Grafici</div>
+    <div class="chart-toolbar">
+        <button class="ct-btn active" id="btn24h" onclick="setPeriod('24h')">24h</button>
+        <button class="ct-btn" id="btn7d" onclick="setPeriod('7d')">7 giorni</button>
+        <button class="ct-btn" id="btn30d" onclick="setPeriod('30d')">30 giorni</button>
+        <button class="ct-btn" id="btnAnno" onclick="setPeriod('anno')">Anno</button>
+        <span style="font-size:.6rem;color:var(--sub);margin-left:4px;" id="chartStatus">Caricamento...</span>
+    </div>
+    <div class="chart-grid">
+        <div class="chart-box"><div class="chart-title">🌡 Temperatura (°C)</div><div class="chart-wrap"><canvas id="chartT"></canvas></div></div>
+        <div class="chart-box"><div class="chart-title">💧 Umidità (%)</div><div class="chart-wrap"><canvas id="chartH"></canvas></div></div>
+        <div class="chart-box"><div class="chart-title">🔵 Pressione (hPa)</div><div class="chart-wrap"><canvas id="chartP"></canvas></div></div>
+    </div>
+
+    <div class="note">
+        Canale ThingSpeak 3211426: field1=Temperatura, field2=Umidità, field3=Pressione raw (stazione),
+        field5=Pressione a livello del mare. Estremi mese/anno calcolati a risoluzione 10 min
+        (stessa del Tetto) per essere confrontabili tra loro.
+    </div>
+</div>
+
+<div class="pagenav">
+    <a class="pagenav-btn" href="index.html">‹</a>
+    <div class="pagenav-label">🏠 Casa</div>
+    <a class="pagenav-btn" href="orto.html">›</a>
+</div>
+
+<script>
+    const TS_CH_CASA = 3211426, TS_RKEY_CASA = '';
+    const TS_CH_TETTO = 3217870, TS_RKEY_TETTO = 'E1WOMQU43G4GNNXI';
+    const FIELD = { temp:1, hum:2, pRaw:3, pSlm:5 };
+
+    function el(id){ return document.getElementById(id); }
+    function fmt(v,d=2){ return (v===null||v===undefined||isNaN(v))?'--':Number(v).toFixed(d); }
+    function tsDateToLocal(ca){ if(!ca||ca.length<16) return ''; const d=new Date(ca); const dd=String(d.getDate()).padStart(2,'0'); const mo=String(d.getMonth()+1).padStart(2,'0'); const hh=String(d.getHours()).padStart(2,'0'); const mm=String(d.getMinutes()).padStart(2,'0'); return dd+'/'+mo+' '+hh+':'+mm; }
+
+    function switchTab(btn,prefix,period){
+        const tabs=btn.parentElement.querySelectorAll('.ex-tab');
+        tabs.forEach(t=>t.classList.remove('active'));
+        btn.classList.add('active');
+        const parent=btn.closest('.card');
+        parent.querySelectorAll('.ex-panel').forEach(p=>p.classList.remove('show'));
+        const target=document.getElementById(prefix+'_'+period);
+        if(target)target.classList.add('show');
+    }
+
+    // ─── Toggle pressione raw / livello del mare ───
+    let pressMode = 'slm';
+    let lastRaw = null, lastSlm = null;
+    function setPressMode(mode){
+        pressMode = mode;
+        el('pbSlm').classList.toggle('active', mode==='slm');
+        el('pbRaw').classList.toggle('active', mode==='raw');
+        el('Pmode').textContent = mode==='slm' ? 'hPa (livello del mare)' : 'hPa (raw stazione)';
+        const v = mode==='slm' ? lastSlm : lastRaw;
+        el('P').textContent = fmt(v);
+    }
+
+    // ─── Live: dati Casa + confronto col Tetto ───
+    let ultimoTetto = null;
+    function fetchTettoLive(){
+        const url='https://api.thingspeak.com/channels/'+TS_CH_TETTO+'/feeds/last.json?api_key='+TS_RKEY_TETTO;
+        fetch(url).then(r=>r.json()).then(feed=>{
+            if(feed && feed.field1!==undefined) ultimoTetto = parseFloat(feed.field1);
+        }).catch(e=>console.warn('[tetto live]',e));
+    }
+
+    function aggiornaDelta(tCasa){
+        const dEl = el('deltaText'), lEl = el('deltaLabel');
+        if(ultimoTetto===null || isNaN(tCasa)){ lEl.textContent='In attesa dati...'; return; }
+        const delta = tCasa - ultimoTetto;
+        const abs = Math.abs(delta).toFixed(1);
+        lEl.textContent = 'Dentro casa e fuori (Tetto) adesso';
+        if(delta > 0.3){ dEl.textContent = 'Dentro fa più caldo di '+abs+'°C rispetto al Tetto'; }
+        else if(delta < -0.3){ dEl.textContent = 'Dentro fa più fresco di '+abs+'°C rispetto al Tetto'; }
+        else { dEl.textContent = 'Temperatura dentro e fuori quasi uguale (±0.3°C)'; }
+    }
+
+    function fetchLive(){
+        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds/last.json'+(TS_RKEY_CASA?'?api_key='+TS_RKEY_CASA:'');
+        fetch(url).then(r=>r.json()).then(feed=>{
+            if(!feed) return;
+            const t = parseFloat(feed['field'+FIELD.temp]);
+            const h = parseFloat(feed['field'+FIELD.hum]);
+            lastRaw = parseFloat(feed['field'+FIELD.pRaw]);
+            lastSlm = parseFloat(feed['field'+FIELD.pSlm]);
+            el('T').textContent = fmt(t);
+            el('H').textContent = fmt(h);
+            el('P').textContent = fmt(pressMode==='slm' ? lastSlm : lastRaw);
+            if(feed.created_at){
+                const ago = Math.round((Date.now()-new Date(feed.created_at).getTime())/60000);
+                el('updAgo').textContent = ago+' min';
+            }
+            aggiornaDelta(t);
+        }).catch(e=>console.warn('[casa live]',e));
+    }
+
+    // ─── Estremi mese/anno: risoluzione 10 min, con retry e richieste in
+    // sequenza (non tutte insieme) per non farsi scartare dati da ThingSpeak,
+    // stessa correzione fatta per il Tetto. ───
+    function fetchChunkRaw(start,end,aggMin,retry){
+        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'start='+start.toISOString()+'&end='+end.toISOString()+(aggMin?'&median='+aggMin:'');
+        return fetch(url).then(r=>r.json()).then(d=>(d&&d.feeds)?d.feeds:[]).catch(e=>{
+            if(!retry) return fetchChunkRaw(start,end,aggMin,true);
+            console.warn('[casa chunk fallito]',start,end,e);
+            return [];
+        });
+    }
+    function fetchRangeSeq(totalStart,totalEnd,aggMin,chunkDays){
+        const ranges=[];
+        let cursor=new Date(totalStart);
+        while(cursor<totalEnd){
+            let chunkEnd=new Date(cursor); chunkEnd.setDate(chunkEnd.getDate()+chunkDays);
+            if(chunkEnd>totalEnd) chunkEnd=new Date(totalEnd);
+            ranges.push([new Date(cursor),chunkEnd]);
+            cursor=chunkEnd;
+        }
+        let results=[];
+        return ranges.reduce((p,r)=>p.then(()=>fetchChunkRaw(r[0],r[1],aggMin).then(f=>{results.push(f);})),Promise.resolve())
+            .then(()=>{
+                const merged=[].concat.apply([],results);
+                merged.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+                const seen={};
+                return merged.filter(f=>{ if(seen[f.created_at])return false; seen[f.created_at]=true; return true; });
+            });
+    }
+    function calcExtremes(feeds,field){
+        let mn=Infinity,mx=-Infinity,mnDt='',mxDt='';
+        feeds.forEach(f=>{
+            const v=parseFloat(f['field'+field]);
+            if(isNaN(v)) return;
+            const dt=tsDateToLocal(f.created_at);
+            if(v<mn){ mn=v; mnDt=dt; }
+            if(v>mx){ mx=v; mxDt=dt; }
+        });
+        return {mn:mn===Infinity?null:mn, mx:mx===-Infinity?null:mx, mnDt, mxDt};
+    }
+    function setExt(prefix,r){
+        if(r.mn!==null){ el('t'+prefix+'Mn_v').textContent='▼ '+r.mn.toFixed(2); el('t'+prefix+'Mn_t').textContent=r.mnDt; }
+        if(r.mx!==null){ el('t'+prefix+'Mx_v').textContent='▲ '+r.mx.toFixed(2); el('t'+prefix+'Mx_t').textContent=r.mxDt; }
+    }
+    let monthDone=false, yearDone=false;
+    function fetchMonth(){
+        if(monthDone) return;
+        const now=new Date(); const start=new Date(now.getFullYear(), now.getMonth(), 1);
+        fetchRangeSeq(start, now, 10, 15).then(feeds=>{ if(feeds.length){ setExt('Mo', calcExtremes(feeds,FIELD.temp)); monthDone=true; } });
+    }
+    function fetchYear(){
+        if(yearDone) return;
+        const now=new Date(); const start=new Date(now.getFullYear(),0,1);
+        fetchRangeSeq(start, now, 10, 50).then(feeds=>{ if(feeds.length){ setExt('Yr', calcExtremes(feeds,FIELD.temp)); yearDone=true; } });
+    }
+
+    // ─── Grafici (24h / 7d / 30d / anno) ───
+    let period='24h';
+    let charts={};
+    function setPeriod(p){
+        period=p;
+        el('btn24h').classList.toggle('active',p==='24h');
+        el('btn7d').classList.toggle('active',p==='7d');
+        el('btn30d').classList.toggle('active',p==='30d');
+        el('btnAnno').classList.toggle('active',p==='anno');
+        loadCharts(p);
+    }
+    function loadCharts(p){
+        el('chartStatus').textContent='Caricamento...';
+        const end=new Date(); let start=new Date(); let aggMin=null, chunkDays=4;
+        if(p==='24h'){ start.setHours(start.getHours()-24); aggMin=null; }
+        else if(p==='7d'){ start.setDate(start.getDate()-7); aggMin=10; }
+        else if(p==='30d'){ start.setDate(start.getDate()-30); aggMin=60; }
+        else if(p==='anno'){ start.setFullYear(start.getFullYear()-1); aggMin=720; chunkDays=30; }
+        fetchRangeSeq(start,end,aggMin,chunkDays).then(feeds=>{
+            if(!feeds.length){ el('chartStatus').textContent='Nessun dato'; return; }
+            el('chartStatus').textContent='Aggiornato: '+feeds.length+' campioni';
+            function series(field){ return feeds.map(f=>({x:new Date(f.created_at).getTime(), y:(f['field'+field]===null||f['field'+field]===undefined||f['field'+field]==='')?null:parseFloat(f['field'+field])})); }
+            makeChart('chartT',[{label:'Temperatura',data:series(FIELD.temp),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,spanGaps:true}],'°C');
+            makeChart('chartH',[{label:'Umidità',data:series(FIELD.hum),borderColor:'#3fb950',borderWidth:2,pointRadius:0,spanGaps:true}],'%');
+            makeChart('chartP',[{label:'Pressione (l.m.)',data:series(FIELD.pSlm),borderColor:'#facc15',borderWidth:2,pointRadius:0,spanGaps:true}],'hPa');
+        }).catch(e=>{ el('chartStatus').textContent='Errore caricamento'; console.warn(e); });
+    }
+    function makeChart(id,datasets,yLabel){
+        const ctx=el(id); if(!ctx) return;
+        const opts={ responsive:true, maintainAspectRatio:false, animation:{duration:300},
+            plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:10}, boxWidth:12, padding:8 } } },
+            scales:{
+                x:{ type:'time', time:{displayFormats:{hour:'HH:mm',day:'dd/MM'}, tooltipFormat:'dd/MM HH:mm'}, ticks:{color:'#8b949e', font:{size:9}, maxTicksLimit:8}, grid:{color:'#1c2430'} },
+                y:{ ticks:{color:'#8b949e', font:{size:9}}, grid:{color:'#1c2430'}, title:{display:true, text:yLabel, color:'#8b949e', font:{size:9}} }
+            } };
+        if(charts[id]){ charts[id].data.datasets=datasets; charts[id].update('none'); return; }
+        charts[id]=new Chart(ctx, { type:'line', data:{datasets}, options:opts });
+    }
+
+    fetchTettoLive(); fetchLive(); loadCharts('24h');
+    setTimeout(fetchMonth, 3000);
+    setTimeout(fetchYear, 6000);
+    setInterval(fetchTettoLive, 60000);
+    setInterval(fetchLive, 60000);
+    setInterval(()=>{ monthDone=false; fetchMonth(); }, 3600000);
+    setInterval(()=>{ yearDone=false; fetchYear(); }, 3600000);
+</script>
+</body>
+</html>
