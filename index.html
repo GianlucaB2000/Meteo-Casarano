@@ -262,6 +262,21 @@ body{padding-bottom:64px;}
         <div class="card cr"><div class="lbl">Questo Mese (mm)</div><div class="val" id="rainMonth">--</div><div class="unit">mm</div></div>
         <div class="card cr"><div class="lbl">Quest'Anno (mm)</div><div class="val" id="rainYear">--</div><div class="unit">mm</div></div>
     </div>
+
+    <div class="sec">🏠 Casa (interno)</div>
+    <div class="grid">
+        <div class="card"><div class="lbl">Temperatura</div><div class="val" id="casaT">--</div><div class="unit">°C</div>
+            <div class="ex-tabs">
+                <button class="ex-tab active" onclick="switchTab(this,'ca','mo')">Mese</button>
+                <button class="ex-tab" onclick="switchTab(this,'ca','yr')">Anno</button>
+            </div>
+            <div id="ca_mo" class="ex-panel show"><div class="ex-row"><div><span class="emn" id="caMoMn_v">--</span><span class="et" id="caMoMn_t"></span></div><div><span class="emx" id="caMoMx_v">--</span><span class="et" id="caMoMx_t"></span></div></div></div>
+            <div id="ca_yr" class="ex-panel"><div class="ex-row"><div><span class="emn" id="caYrMn_v">--</span><span class="et" id="caYrMn_t"></span></div><div><span class="emx" id="caYrMx_v">--</span><span class="et" id="caYrMx_t"></span></div></div></div>
+        </div>
+        <div class="card"><div class="lbl">Umidità</div><div class="val" id="casaH">--</div><div class="unit">%</div></div>
+        <div class="card"><div class="lbl">Pressione</div><div class="val" id="casaP">--</div><div class="unit">hPa</div></div>
+        <div class="card" style="border-color:var(--acc)"><div class="lbl">Δ Casa − Tetto</div><div class="val" id="casaDelta">--</div><div class="unit">°C</div></div>
+    </div>
 </div>
 
 <div class="pagenav">
@@ -278,6 +293,9 @@ body{padding-bottom:64px;}
 
     const LAT=40.014510, LON=18.169858;
     const TS_CH=3217870, TS_RKEY='E1WOMQU43G4GNNXI';
+    // Stazione "Casa" (interno): field1=Temperatura, field2=Umidita,
+    // field3=Pressione, field5=Pressione livello del mare.
+    const TS_CH_CASA=3211426, TS_RKEY_CASA='';
 
     // ─── Utility ───
     function el(id){ return document.getElementById(id); }
@@ -427,7 +445,9 @@ body{padding-bottom:64px;}
         const now=new Date();
         const y=now.getFullYear(), mo=now.getMonth()+1;
         const start=new Date(y, mo-1, 1).toISOString().split('T')[0];
-        const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+start+'T00:00:00Z&results=8000';
+        // Dati grezzi (1-2 min) sforerebbero il limite di 8000 record di ThingSpeak
+        // gia' dopo pochi giorni: aggreghiamo a 15 min per coprire il mese intero.
+        const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+start+'T00:00:00Z&end='+new Date().toISOString()+'&median=15&results=8000';
         fetch(url).then(r=>r.json()).then(data=>{
             if(data&&data.feeds&&data.feeds.length>0){ fillTsExtremes(data.feeds,'Mo'); tsMonthDone=true; }
         }).catch(e=>console.warn('[TS month]',e));
@@ -435,7 +455,9 @@ body{padding-bottom:64px;}
     function fetchTsYear(){
         if(tsYearDone) return;
         const y=new Date().getFullYear();
-        const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+y+'-01-01T00:00:00Z&results=8000';
+        // Stessa aggregazione a 12h del grafico annuale: copre tutto l'anno restando
+        // ben sotto il limite di 8000 record.
+        const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+y+'-01-01T00:00:00Z&end='+new Date().toISOString()+'&median=720&results=8000';
         fetch(url).then(r=>r.json()).then(data=>{
             if(data&&data.feeds&&data.feeds.length>0){ fillTsExtremes(data.feeds,'Yr'); tsYearDone=true; }
         }).catch(e=>console.warn('[TS year]',e));
@@ -869,7 +891,7 @@ body{padding-bottom:64px;}
         if (period === '24h') { start.setHours(start.getHours() - 24); aggMinutes = AGG_24H_MAIN; }
         else if (period === '7d') { start.setDate(start.getDate() - 7); aggMinutes = 10; }
         else if (period === '30d') { start.setDate(start.getDate() - 30); aggMinutes = 60; }
-        else if (period === 'anno') { start.setFullYear(start.getFullYear() - 1); aggMinutes = AGG_ANNO_MINUTES; chunkDays = 370; }
+        else if (period === 'anno') { start.setFullYear(start.getFullYear() - 1); aggMinutes = AGG_ANNO_MINUTES; chunkDays = 30; }
 
         if (period === '24h') {
             // Due fetch in parallelo: dati "main" a grana piu' rada per
@@ -904,6 +926,71 @@ body{padding-bottom:64px;}
     }
     setInterval(()=>loadCharts(chartPeriod), 60000);
 
+    // ─── LIVE DATA: stazione Casa (interno) + delta vs Tetto ───
+    let ultimaTempTetto = null;
+    function fetchCasaLive(){
+        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds/last.json'+(TS_RKEY_CASA?'?api_key='+TS_RKEY_CASA:'');
+        fetch(url).then(r=>r.json()).then(feed=>{
+            if(!feed) return;
+            const t = parseFloat(feed.field1);
+            const h = parseFloat(feed.field2);
+            const p = parseFloat(feed.field3);
+            safeSet('casaT', isNaN(t)?'--':t.toFixed(1));
+            safeSet('casaH', isNaN(h)?'--':h.toFixed(1));
+            safeSet('casaP', isNaN(p)?'--':p.toFixed(1));
+            if(!isNaN(t) && ultimaTempTetto!==null){
+                const delta = t - ultimaTempTetto;
+                const dEl = el('casaDelta');
+                if(dEl){
+                    dEl.textContent = (delta>=0?'+':'')+delta.toFixed(2);
+                    dEl.style.color = 'var(--acc)'; // normale che dentro/fuori differiscano parecchio, nessun allarme
+                }
+            }
+        }).catch(e=>console.warn('[casa live]',e));
+    }
+    fetchCasaLive();
+    setInterval(fetchCasaLive, 60000);
+
+    // ─── Estremi mese/anno per Casa (stessa correzione fatta per il Tetto:
+    // aggregazione per restare sotto il limite di 8000 record ThingSpeak) ───
+    let casaMonthDone=false, casaYearDone=false;
+    function calcExtremesSimple(feeds){
+        let mn=Infinity,mx=-Infinity,mnDt='',mxDt='';
+        feeds.forEach(f=>{
+            const v=parseFloat(f.field1);
+            if(isNaN(v)) return;
+            const dt=tsDateToLocal(f.created_at);
+            if(v<mn){ mn=v; mnDt=dt; }
+            if(v>mx){ mx=v; mxDt=dt; }
+        });
+        return {mn:mn===Infinity?null:mn, mx:mx===-Infinity?null:mx, mnDt, mxDt};
+    }
+    function setCasaExt(prefix,r){
+        if(r.mn!==null){ const e=el('ca'+prefix+'Mn_v'); if(e)e.textContent='▼ '+r.mn.toFixed(1); const t=el('ca'+prefix+'Mn_t'); if(t)t.textContent=r.mnDt?r.mnDt.substring(r.mnDt.length-5):''; }
+        if(r.mx!==null){ const e=el('ca'+prefix+'Mx_v'); if(e)e.textContent='▲ '+r.mx.toFixed(1); const t=el('ca'+prefix+'Mx_t'); if(t)t.textContent=r.mxDt?r.mxDt.substring(r.mxDt.length-5):''; }
+    }
+    function fetchCasaMonth(){
+        if(casaMonthDone) return;
+        const now=new Date(); const y=now.getFullYear(), mo=now.getMonth()+1;
+        const start=new Date(y, mo-1, 1).toISOString().split('T')[0];
+        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'start='+start+'T00:00:00Z&end='+new Date().toISOString()+'&median=15&results=8000';
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(data&&data.feeds&&data.feeds.length>0){ setCasaExt('Mo', calcExtremesSimple(data.feeds)); casaMonthDone=true; }
+        }).catch(e=>console.warn('[casa month]',e));
+    }
+    function fetchCasaYear(){
+        if(casaYearDone) return;
+        const y=new Date().getFullYear();
+        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'start='+y+'-01-01T00:00:00Z&end='+new Date().toISOString()+'&median=720&results=8000';
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(data&&data.feeds&&data.feeds.length>0){ setCasaExt('Yr', calcExtremesSimple(data.feeds)); casaYearDone=true; }
+        }).catch(e=>console.warn('[casa year]',e));
+    }
+    setTimeout(fetchCasaMonth, 5000);
+    setTimeout(fetchCasaYear, 9000);
+    setInterval(()=>{ casaMonthDone=false; fetchCasaMonth(); }, 3600000);
+    setInterval(()=>{ casaYearDone=false; fetchCasaYear(); }, 3600000);
+
     // ─── LIVE DATA: ultimo feed da ThingSpeak ───
     function fetchLiveData(){
         const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds/last.json?api_key='+TS_RKEY;
@@ -911,6 +998,7 @@ body{padding-bottom:64px;}
             if(!feed || !feed.field1) return;
             const d = {};
             d.T = parseFloat(feed.field1);
+            ultimaTempTetto = isNaN(d.T) ? ultimaTempTetto : d.T;
             d.H = parseFloat(feed.field2);
             d.Pslp = parseFloat(feed.field3);
             d.P = parseFloat(feed.field3);

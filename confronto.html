@@ -42,12 +42,30 @@ body{padding-bottom:64px;}
 <div class="wrap">
     <div class="status" id="status">Caricamento dati (ultime 48h)...</div>
 
+    <div class="sec">Delta termico attuale (media ultimi 10 min)</div>
+    <div class="grid" style="margin-bottom:6px">
+        <div class="card" style="grid-column:1/-1;border-color:var(--acc);padding:16px;">
+            <div class="lbl">Tetto − Orto adesso</div>
+            <div class="val" id="dNow" style="font-size:2.2rem">--</div>
+            <div class="note" id="dNowInfo">In attesa dati...</div>
+        </div>
+    </div>
+
     <div class="sec">Delta termico (Tetto − Orto), media mobile 10 min</div>
     <div class="grid">
         <div class="card"><div class="lbl">Δ complessivo</div><div class="val" id="dTot">--</div><div class="note">Intero periodo</div></div>
         <div class="card"><div class="lbl">Δ diurno (06-20)</div><div class="val" id="dGiorno">--</div><div class="note">Giorno intero</div></div>
         <div class="card" style="border-color:var(--acc)"><div class="lbl">Δ picco sole 13-16</div><div class="val" id="dPicco">--</div><div class="note">Metrica principale</div></div>
         <div class="card"><div class="lbl">Δ notturno</div><div class="val" id="dNotte">--</div><div class="note">Irraggiamento notturno</div></div>
+    </div>
+    <div class="note" style="margin:8px 2px 0;line-height:1.5">
+        Ogni valore qui sopra è la <b>media di tutti i delta calcolati nella finestra oraria indicata</b>,
+        su tutto il periodo di 48h analizzato — non un singolo istante.
+        <b>Complessivo</b> = media su tutte le 48h. <b>Diurno</b> = media dei soli punti tra le 06:00 e le 20:00
+        (tutti i giorni nel periodo). <b>Notturno</b> = media dei punti fuori da quella fascia (20:00-06:00).
+        <b>Picco sole 13-16</b> = media ristretta alle ore centrali del pomeriggio, quando l'irraggiamento
+        diretto sul tetto è massimo: è la metrica più indicativa di quanto il tetto scaldi di più rispetto
+        all'orto per effetto del sole.
     </div>
 
     <div class="chart-box">
@@ -139,6 +157,15 @@ body{padding-bottom:64px;}
         const dNotte  = mean(withDelta.filter(p=>{ const o=rome(p.t); return o<6||o>=20; }).map(p=>p.delta));
         const dPicco  = mean(withDelta.filter(p=>{ const o=rome(p.t); return o>=13&&o<16; }).map(p=>p.delta));
 
+        // Delta "attuale": l'ultimo punto della serie e' gia' la media mobile
+        // degli ultimi 10 minuti (rollingMean10min), quindi rappresenta esattamente
+        // "il delta adesso, calcolato sui valori mediati degli ultimi 10 minuti".
+        const last = withDelta[withDelta.length-1];
+        const minutesAgo = Math.round((Date.now()-last.t)/60000);
+        el('dNow').textContent = fmt(last.delta);
+        el('dNow').style.color = colorFor(last.delta);
+        el('dNowInfo').textContent = 'Tetto '+last.tetto.toFixed(3)+'°C · Orto '+last.orto.toFixed(3)+'°C · aggiornato '+minutesAgo+' min fa';
+
         el('dTot').textContent=fmt(dTot); el('dTot').style.color=colorFor(dTot);
         el('dGiorno').textContent=fmt(dGiorno); el('dGiorno').style.color=colorFor(dGiorno);
         el('dNotte').textContent=fmt(dNotte); el('dNotte').style.color=colorFor(dNotte);
@@ -163,7 +190,10 @@ body{padding-bottom:64px;}
         ]}, options: baseOpts });
 
         const dVals = withDelta.map(p=>p.delta);
-        const yMin = Math.min(...dVals)-0.04, yMax = Math.max(...dVals)+0.04;
+        // Scala fissa a +-0.3 come richiesto, cosi' le fluttuazioni si vedono bene;
+        // si allarga solo se i dati reali superano quel range.
+        const yMin = Math.min(-0.3, Math.min(...dVals)-0.02);
+        const yMax = Math.max(0.3, Math.max(...dVals)+0.02);
         const deltaOpts = JSON.parse(JSON.stringify(baseOpts));
         deltaOpts.scales.y.min = yMin; deltaOpts.scales.y.max = yMax;
         new Chart(el('cDelta'), { type:'line', data:{ datasets:[
