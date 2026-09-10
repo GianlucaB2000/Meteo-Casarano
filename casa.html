@@ -159,9 +159,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     // ─── Live: dati Casa + confronto col Tetto ───
     let ultimoTetto = null;
     function fetchTettoLive(){
-        const url='https://api.thingspeak.com/channels/'+TS_CH_TETTO+'/feeds/last.json?api_key='+TS_RKEY_TETTO;
-        fetch(url).then(r=>r.json()).then(feed=>{
-            if(feed && feed.field1!==undefined) ultimoTetto = parseFloat(feed.field1);
+        const url='https://api.thingspeak.com/channels/'+TS_CH_TETTO+'/feeds.json?api_key='+TS_RKEY_TETTO+'&results=5';
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(data && data.feeds && data.feeds.length) ultimoTetto = median(data.feeds.map(f=>parseFloat(f.field1)));
         }).catch(e=>console.warn('[tetto live]',e));
     }
 
@@ -176,19 +176,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         else { dEl.textContent = 'Temperatura dentro e fuori quasi uguale (±0.3°C)'; }
     }
 
+    function median(arr){ const s=arr.filter(v=>!isNaN(v)).sort((a,b)=>a-b); if(!s.length) return NaN; const m=Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2; }
     function fetchLive(){
-        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds/last.json'+(TS_RKEY_CASA?'?api_key='+TS_RKEY_CASA:'');
-        fetch(url).then(r=>r.json()).then(feed=>{
-            if(!feed) return;
-            const t = parseFloat(feed['field'+FIELD.temp]);
-            const h = parseFloat(feed['field'+FIELD.hum]);
-            lastRaw = parseFloat(feed['field'+FIELD.pRaw]);
-            lastSlm = parseFloat(feed['field'+FIELD.pSlm]);
+        // Uso la mediana degli ultimi 5 campioni (non solo l'ultimo) cosi' un
+        // singolo dato anomalo (glitch del firmware) non finisce mostrato come
+        // valore "attuale".
+        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'results=5';
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(!data||!data.feeds||!data.feeds.length) return;
+            const feeds=data.feeds;
+            const last=feeds[feeds.length-1];
+            const t = median(feeds.map(f=>parseFloat(f['field'+FIELD.temp])));
+            const h = median(feeds.map(f=>parseFloat(f['field'+FIELD.hum])));
+            lastRaw = median(feeds.map(f=>parseFloat(f['field'+FIELD.pRaw])));
+            lastSlm = median(feeds.map(f=>parseFloat(f['field'+FIELD.pSlm])));
             el('T').textContent = fmt(t);
             el('H').textContent = fmt(h);
             el('P').textContent = fmt(pressMode==='slm' ? lastSlm : lastRaw);
-            if(feed.created_at){
-                const ago = Math.round((Date.now()-new Date(feed.created_at).getTime())/60000);
+            if(last.created_at){
+                const ago = Math.round((Date.now()-new Date(last.created_at).getTime())/60000);
                 el('updAgo').textContent = ago+' min';
             }
             aggiornaDelta(t);
@@ -272,10 +278,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         fetchRangeSeq(start,end,aggMin,chunkDays).then(feeds=>{
             if(!feeds.length){ el('chartStatus').textContent='Nessun dato'; return; }
             el('chartStatus').textContent='Aggiornato: '+feeds.length+' campioni';
-            function series(field){ return feeds.map(f=>({x:new Date(f.created_at).getTime(), y:(f['field'+field]===null||f['field'+field]===undefined||f['field'+field]==='')?null:parseFloat(f['field'+field])})); }
-            makeChart('chartT',[{label:'Temperatura',data:series(FIELD.temp),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,spanGaps:true}],'°C');
+            // Scarta i "punti isolati": un valore che si stacca tanto sia dal
+            // precedente che dal successivo (poi torna normale) e' quasi
+            // certamente un glitch del sensore/firmware, non un cambiamento
+            // reale (che invece continua nella stessa direzione).
+            function despike(arr, maxJump){
+                for(let i=1;i<arr.length-1;i++){
+                    const p=arr[i-1], c=arr[i], n=arr[i+1];
+                    if(p===null||c===null||n===null) continue;
+                    if(Math.abs(c-p)>maxJump && Math.abs(c-n)>maxJump && Math.sign(c-p)===Math.sign(c-n)){
+                        arr[i]=null;
+                    }
+                }
+                return arr;
+            }
+            function series(field, maxJump){
+                const raw = feeds.map(f=>(f['field'+field]===null||f['field'+field]===undefined||f['field'+field]==='')?null:parseFloat(f['field'+field]));
+                const clean = maxJump ? despike(raw.slice(), maxJump) : raw;
+                return feeds.map((f,i)=>({x:new Date(f.created_at).getTime(), y:clean[i]}));
+            }
+            makeChart('chartT',[{label:'Temperatura',data:series(FIELD.temp,1.5),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,spanGaps:true}],'°C');
             makeChart('chartH',[{label:'Umidità',data:series(FIELD.hum),borderColor:'#3fb950',borderWidth:2,pointRadius:0,spanGaps:true}],'%');
-            makeChart('chartP',[{label:'Pressione (l.m.)',data:series(FIELD.pSlm),borderColor:'#facc15',borderWidth:2,pointRadius:0,spanGaps:true}],'hPa');
+            makeChart('chartP',[{label:'Pressione (l.m.)',data:series(FIELD.pSlm,3),borderColor:'#facc15',borderWidth:2,pointRadius:0,spanGaps:true}],'hPa');
         }).catch(e=>{ el('chartStatus').textContent='Errore caricamento'; console.warn(e); });
     }
     function makeChart(id,datasets,yLabel){

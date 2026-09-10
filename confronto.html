@@ -141,6 +141,23 @@ body{padding-bottom:64px;}
         const sT = feedsT.map(f=>({ t:new Date(f.created_at).getTime(), v: f.field1!==null&&f.field1!==undefined&&f.field1!==''?parseFloat(f.field1):null }));
         const sO = feedsO.map(f=>({ t:new Date(f.created_at).getTime(), v: f['field'+FIELD_ORTO_TEMP]!==null&&f['field'+FIELD_ORTO_TEMP]!==undefined&&f['field'+FIELD_ORTO_TEMP]!==''?parseFloat(f['field'+FIELD_ORTO_TEMP]):null }));
 
+        // Scarta i "punti isolati": un valore che si stacca tanto sia dal
+        // precedente che dal successivo (poi torna normale) e' un glitch del
+        // sensore/firmware, non un cambiamento reale - altrimenti un solo
+        // picco (es. errore di codice per pochi minuti) rovina la scala del
+        // grafico del delta per tutte le 48h.
+        function despike(series, maxJump){
+            for(let i=1;i<series.length-1;i++){
+                const p=series[i-1].v, c=series[i].v, n=series[i+1].v;
+                if(p===null||c===null||n===null) continue;
+                if(Math.abs(c-p)>maxJump && Math.abs(c-n)>maxJump && Math.sign(c-p)===Math.sign(c-n)){
+                    series[i].v = null;
+                }
+            }
+        }
+        despike(sT, 1.5);
+        despike(sO, 1.5);
+
         const smT = rollingMean10min(sT);
         const smO = rollingMean10min(sO);
         const aligned = alignByTimestamp(smT, smO).filter(p=>p.tetto!==null && p.orto!==null);
@@ -164,7 +181,11 @@ body{padding-bottom:64px;}
         const minutesAgo = Math.round((Date.now()-last.t)/60000);
         el('dNow').textContent = fmt(last.delta);
         el('dNow').style.color = colorFor(last.delta);
-        el('dNowInfo').textContent = 'Tetto '+last.tetto.toFixed(3)+'°C · Orto '+last.orto.toFixed(3)+'°C · aggiornato '+minutesAgo+' min fa';
+        let chiVerbo;
+        if(last.delta > 0.05) chiVerbo = 'Il Tetto è più caldo dell\'Orto di '+Math.abs(last.delta).toFixed(2)+'°C';
+        else if(last.delta < -0.05) chiVerbo = 'L\'Orto è più caldo del Tetto di '+Math.abs(last.delta).toFixed(2)+'°C';
+        else chiVerbo = 'Tetto e Orto sono praticamente alla stessa temperatura';
+        el('dNowInfo').textContent = chiVerbo+' · Tetto '+last.tetto.toFixed(3)+'°C · Orto '+last.orto.toFixed(3)+'°C · aggiornato '+minutesAgo+' min fa';
 
         el('dTot').textContent=fmt(dTot); el('dTot').style.color=colorFor(dTot);
         el('dGiorno').textContent=fmt(dGiorno); el('dGiorno').style.color=colorFor(dGiorno);

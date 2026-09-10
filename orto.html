@@ -39,6 +39,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .ex-panel.show{display:block;}
 .ex-row{display:flex;justify-content:space-between;font-size:.72rem;}
 .et{display:block;font-size:.6rem;color:var(--sub);margin-top:1px;}
+.lazy-chart{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:10px;cursor:pointer;}
+.lazy-title{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);display:flex;justify-content:space-between;align-items:center;}
+.lazy-hint{color:var(--acc);text-transform:none;letter-spacing:0;font-size:.62rem;}
+.lazy-chart.loaded{cursor:default;}
+.lazy-chart.loaded .chart-wrap{display:block !important;margin-top:8px;height:200px;}
 .emn{color:#60a5fa;font-weight:600;font-family:'JetBrains Mono',monospace;}
 .emx{color:var(--orn);font-weight:600;font-family:'JetBrains Mono',monospace;}
 .chart-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:12px;}
@@ -131,7 +136,24 @@ body{padding-bottom:64px;}
     <div class="sec">Grafici (ultime 24h, dati grezzi)</div>
     <div class="chart-box"><div class="chart-title">🌡 Temperatura (°C)</div><div class="chart-wrap"><canvas id="chartT"></canvas></div></div>
     <div class="chart-box"><div class="chart-title">💧 Umidita (%)</div><div class="chart-wrap"><canvas id="chartH"></canvas></div></div>
-    <div class="chart-box"><div class="chart-title">☀ Radiazione (lux)</div><div class="chart-wrap"><canvas id="chartL"></canvas></div></div>
+
+    <div class="sec">Altri grafici (tocca per caricare)</div>
+    <div class="lazy-chart" id="lz_TS" onclick="loadLazyChart('TS')">
+        <div class="lazy-title">🟤 Temp. suolo (°C) <span class="lazy-hint">tocca per caricare</span></div>
+        <div class="chart-wrap" style="display:none"><canvas id="chartTS"></canvas></div>
+    </div>
+    <div class="lazy-chart" id="lz_L" onclick="loadLazyChart('L')">
+        <div class="lazy-title">☀ Radiazione (lux) <span class="lazy-hint">tocca per caricare</span></div>
+        <div class="chart-wrap" style="display:none"><canvas id="chartL"></canvas></div>
+    </div>
+    <div class="lazy-chart" id="lz_BG" onclick="loadLazyChart('BG')">
+        <div class="lazy-title">🌡 Delta solare / black globe (°C) <span class="lazy-hint">tocca per caricare</span></div>
+        <div class="chart-wrap" style="display:none"><canvas id="chartBG"></canvas></div>
+    </div>
+    <div class="lazy-chart" id="lz_UV" onclick="loadLazyChart('UV')">
+        <div class="lazy-title">🔆 UV (indice) <span class="lazy-hint">tocca per caricare</span></div>
+        <div class="chart-wrap" style="display:none"><canvas id="chartUV"></canvas></div>
+    </div>
 </div>
 
 <div class="pagenav">
@@ -292,10 +314,33 @@ body{padding-bottom:64px;}
             makeChart('chartH', [
                 { label:'Umidita', data:series(FIELD.hum), borderColor:'#3fb950', borderWidth:2, pointRadius:0, spanGaps:true }
             ], '%');
-            makeChart('chartL', [
-                { label:'Lux', data:series(FIELD.lux), borderColor:'#facc15', borderWidth:2, pointRadius:0, spanGaps:true }
-            ], 'lux');
         }).catch(e=>console.warn('[orto charts]',e));
+    }
+
+    // ─── Grafici secondari: caricati solo al primo tocco, non al caricamento
+    // della pagina, per non appesantire inutilmente ogni apertura ───
+    const LAZY_CFG = {
+        TS: { field:'soilTemp', label:'Temp. suolo', color:'#a3785c', unit:'°C' },
+        L:  { field:'lux',      label:'Lux',          color:'#facc15', unit:'lux' },
+        BG: { field:'blackGlobe', label:'Delta solare', color:'#fb923c', unit:'°C' },
+        UV: { field:'uv',       label:'UV',            color:'#c084fc', unit:'indice' }
+    };
+    const lazyLoaded = {};
+    function loadLazyChart(key){
+        if(lazyLoaded[key]) return;
+        lazyLoaded[key] = true;
+        const box = el('lz_'+key);
+        box.classList.add('loaded');
+        const cfg = LAZY_CFG[key];
+        const start=new Date(Date.now()-24*3600*1000).toISOString();
+        const url='https://api.thingspeak.com/channels/'+TS_CH_ORTO+'/feeds.json?'+(TS_RKEY_ORTO?'api_key='+TS_RKEY_ORTO+'&':'')+'start='+start;
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(!data||!data.feeds||!data.feeds.length) return;
+            const feeds=data.feeds;
+            const fieldNum=FIELD[cfg.field];
+            const series=feeds.map(f=>({x:new Date(f.created_at).getTime(), y:(f['field'+fieldNum]===null||f['field'+fieldNum]===undefined)?null:parseFloat(f['field'+fieldNum])}));
+            makeChart('chart'+key, [{ label:cfg.label, data:series, borderColor:cfg.color, borderWidth:2, pointRadius:0, spanGaps:true }], cfg.unit);
+        }).catch(e=>console.warn('[orto lazy '+key+']',e));
     }
 
     fetchLive(); fetchExtremes24h(); loadCharts();
