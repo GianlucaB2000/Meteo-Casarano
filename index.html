@@ -279,21 +279,18 @@ body{padding-bottom:64px;}
     document.addEventListener('click',function(e){ const gw=document.querySelector('.gear-wrap'); if(gw&&!gw.contains(e.target)){ const d=el('gearDrop'); if(d)d.classList.remove('open'); } });
 
     // ─── Orologio ───
-    let serverTime = null;
+    // Prima usava l'orario dell'ultimo dato ricevuto da ThingSpeak come base:
+    // se la stazione smette di inviare dati per ore, l'orologio mostrato
+    // restava congelato a quel momento invece di mostrare l'ora reale.
+    let serverTime = null; // usata solo per "aggiornato X fa", non per l'orologio
     function updateClock() {
-        if (serverTime) {
-            const now = Date.now();
-            const diff = Math.floor((now - serverTime.ts) / 1000);
-            const d = new Date(serverTime.timestamp + diff * 1000);
-            safeSet('ora', String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0'));
-        }
+        const d = new Date();
+        safeSet('ora', String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0'));
     }
     setInterval(updateClock, 1000);
+    updateClock();
 
-    // ─── Trend badge ─── (gestiti da fetchTs24h)
-    function updateTrendBadge(d){}
-    function updateTrendBadgeH(d){}
-    function updateTrendBadgeP(d){}
+    // ─── Trend badge: calcolato dentro fetchTs24h (vedi sotto) ───
 
     // ─── Funzioni per estremi da ThingSpeak ───
     function tsDateToLocal(ca){ if(!ca||ca.length<16) return ''; const d=new Date(ca); const dd=String(d.getDate()).padStart(2,'0'); const mo=String(d.getMonth()+1).padStart(2,'0'); const hh=String(d.getHours()).padStart(2,'0'); const mm=String(d.getMinutes()).padStart(2,'0'); return dd+'/'+mo+' '+hh+':'+mm; }
@@ -747,16 +744,22 @@ body{padding-bottom:64px;}
             });
         }
         function toTimeSeries(field) { return toTimeSeriesFrom(feeds, field); }
-        // Scarta i "punti isolati": un valore che si stacca tanto sia dal
-        // precedente che dal successivo (e poi torna normale) e' quasi certamente
-        // un glitch del sensore/firmware, non un cambiamento reale.
-        function despike(data, maxJump) {
-            for (var i = 1; i < data.length - 1; i++) {
-                var p = data[i-1].y, c = data[i].y, n = data[i+1].y;
-                if (p === null || c === null || n === null) continue;
-                if (Math.abs(c-p) > maxJump && Math.abs(c-n) > maxJump && Math.sign(c-p) === Math.sign(c-n)) {
-                    data[i] = { x: data[i].x, y: null };
-                }
+        // Scarta gli outlier confrontando ogni punto con la mediana di una
+        // finestra di punti vicini: un glitch che dura piu' di un campione
+        // (come quello del 9 settembre) sfuggiva al controllo precedente,
+        // che guardava solo il vicino immediato.
+        function despike(data, maxJump, half) {
+            half = half || 4;
+            const values = data.map(function(p){ return p.y; });
+            for (var i = 0; i < data.length; i++) {
+                if (values[i] === null) continue;
+                var lo = Math.max(0, i-half), hi = Math.min(data.length-1, i+half);
+                var win = [];
+                for (var j = lo; j <= hi; j++) { if (j!==i && values[j]!==null) win.push(values[j]); }
+                if (win.length < 5) continue;
+                win.sort(function(a,b){ return a-b; });
+                var med = win[Math.floor(win.length/2)];
+                if (Math.abs(values[i]-med) > maxJump) { data[i] = { x: data[i].x, y: null }; }
             }
             return data;
         }
@@ -777,10 +780,10 @@ body{padding-bottom:64px;}
                 }
             };
         }
-        var tData = despike(toTimeSeries(1), 1.5);
+        var tData = despike(toTimeSeries(1), 2.5);
         var hData = toTimeSeries(2);
         var pDataRaw = toTimeSeries(3);
-        var pData = despike(pDataRaw.map(function(p){ if(p.y===null||p.y<940||p.y>1050) return {x:p.x,y:null}; return p; }), 3);
+        var pData = despike(pDataRaw.map(function(p){ if(p.y===null||p.y<940||p.y>1050) return {x:p.x,y:null}; return p; }), 4);
         // Il vento usa sempre la risoluzione fine (windFeeds, valorizzato solo
         // nella vista 24h); se windFeeds non e' passato si ricade su 'feeds'.
         var vData = toTimeSeriesFrom(windFeeds || feeds, 4);

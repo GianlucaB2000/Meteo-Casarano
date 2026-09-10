@@ -278,28 +278,32 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         fetchRangeSeq(start,end,aggMin,chunkDays).then(feeds=>{
             if(!feeds.length){ el('chartStatus').textContent='Nessun dato'; return; }
             el('chartStatus').textContent='Aggiornato: '+feeds.length+' campioni';
-            // Scarta i "punti isolati": un valore che si stacca tanto sia dal
-            // precedente che dal successivo (poi torna normale) e' quasi
-            // certamente un glitch del sensore/firmware, non un cambiamento
-            // reale (che invece continua nella stessa direzione).
-            function despike(arr, maxJump){
-                for(let i=1;i<arr.length-1;i++){
-                    const p=arr[i-1], c=arr[i], n=arr[i+1];
-                    if(p===null||c===null||n===null) continue;
-                    if(Math.abs(c-p)>maxJump && Math.abs(c-n)>maxJump && Math.sign(c-p)===Math.sign(c-n)){
-                        arr[i]=null;
-                    }
+            // Scarta gli outlier confrontando ogni punto con la mediana di una
+            // finestra di punti vicini (non solo il vicino immediato), cosi'
+            // anche un glitch che dura piu' di un campione viene individuato.
+            function despike(arr, maxJump, half){
+                half = half || 4;
+                const out = arr.slice();
+                for(let i=0;i<arr.length;i++){
+                    if(arr[i]===null) continue;
+                    const lo=Math.max(0,i-half), hi=Math.min(arr.length-1,i+half);
+                    const win=[];
+                    for(let j=lo;j<=hi;j++){ if(j!==i && arr[j]!==null) win.push(arr[j]); }
+                    if(win.length<5) continue;
+                    win.sort((a,b)=>a-b);
+                    const med=win[Math.floor(win.length/2)];
+                    if(Math.abs(arr[i]-med)>maxJump){ out[i]=null; }
                 }
-                return arr;
+                return out;
             }
             function series(field, maxJump){
                 const raw = feeds.map(f=>(f['field'+field]===null||f['field'+field]===undefined||f['field'+field]==='')?null:parseFloat(f['field'+field]));
-                const clean = maxJump ? despike(raw.slice(), maxJump) : raw;
+                const clean = maxJump ? despike(raw, maxJump) : raw;
                 return feeds.map((f,i)=>({x:new Date(f.created_at).getTime(), y:clean[i]}));
             }
-            makeChart('chartT',[{label:'Temperatura',data:series(FIELD.temp,1.5),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,spanGaps:true}],'°C');
+            makeChart('chartT',[{label:'Temperatura',data:series(FIELD.temp,2.5),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,spanGaps:true}],'°C');
             makeChart('chartH',[{label:'Umidità',data:series(FIELD.hum),borderColor:'#3fb950',borderWidth:2,pointRadius:0,spanGaps:true}],'%');
-            makeChart('chartP',[{label:'Pressione (l.m.)',data:series(FIELD.pSlm,3),borderColor:'#facc15',borderWidth:2,pointRadius:0,spanGaps:true}],'hPa');
+            makeChart('chartP',[{label:'Pressione (l.m.)',data:series(FIELD.pSlm,4),borderColor:'#facc15',borderWidth:2,pointRadius:0,spanGaps:true}],'hPa');
         }).catch(e=>{ el('chartStatus').textContent='Errore caricamento'; console.warn(e); });
     }
     function makeChart(id,datasets,yLabel){

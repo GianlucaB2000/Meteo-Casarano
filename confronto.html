@@ -141,22 +141,26 @@ body{padding-bottom:64px;}
         const sT = feedsT.map(f=>({ t:new Date(f.created_at).getTime(), v: f.field1!==null&&f.field1!==undefined&&f.field1!==''?parseFloat(f.field1):null }));
         const sO = feedsO.map(f=>({ t:new Date(f.created_at).getTime(), v: f['field'+FIELD_ORTO_TEMP]!==null&&f['field'+FIELD_ORTO_TEMP]!==undefined&&f['field'+FIELD_ORTO_TEMP]!==''?parseFloat(f['field'+FIELD_ORTO_TEMP]):null }));
 
-        // Scarta i "punti isolati": un valore che si stacca tanto sia dal
-        // precedente che dal successivo (poi torna normale) e' un glitch del
-        // sensore/firmware, non un cambiamento reale - altrimenti un solo
-        // picco (es. errore di codice per pochi minuti) rovina la scala del
-        // grafico del delta per tutte le 48h.
-        function despike(series, maxJump){
-            for(let i=1;i<series.length-1;i++){
-                const p=series[i-1].v, c=series[i].v, n=series[i+1].v;
-                if(p===null||c===null||n===null) continue;
-                if(Math.abs(c-p)>maxJump && Math.abs(c-n)>maxJump && Math.sign(c-p)===Math.sign(c-n)){
-                    series[i].v = null;
-                }
+        // Scarta gli outlier confrontando ogni punto con la MEDIANA di una
+        // finestra di punti vicini (non solo il vicino immediato): un glitch
+        // che dura 2-3 campioni di fila (come quello di oggi) sfuggiva al
+        // controllo precedente, che guardava solo un punto alla volta.
+        function despike(series, maxJump, half){
+            half = half || 4;
+            const values = series.map(p=>p.v);
+            for(let i=0;i<series.length;i++){
+                if(values[i]===null) continue;
+                const lo=Math.max(0,i-half), hi=Math.min(series.length-1,i+half);
+                const win=[];
+                for(let j=lo;j<=hi;j++){ if(j!==i && values[j]!==null) win.push(values[j]); }
+                if(win.length<5) continue;
+                win.sort((a,b)=>a-b);
+                const med=win[Math.floor(win.length/2)];
+                if(Math.abs(values[i]-med)>maxJump){ series[i].v=null; }
             }
         }
-        despike(sT, 1.5);
-        despike(sO, 1.5);
+        despike(sT, 1.2);
+        despike(sO, 1.2);
 
         const smT = rollingMean10min(sT);
         const smO = rollingMean10min(sO);
@@ -210,11 +214,10 @@ body{padding-bottom:64px;}
             { label:'Orto',  data: withDelta.map(p=>({x:p.t,y:p.orto})),  borderColor:'#f87171', borderWidth:2.4, pointRadius:0, tension:0.15 }
         ]}, options: baseOpts });
 
-        const dVals = withDelta.map(p=>p.delta);
-        // Scala fissa a +-0.3 come richiesto, cosi' le fluttuazioni si vedono bene;
-        // si allarga solo se i dati reali superano quel range.
-        const yMin = Math.min(-0.3, Math.min(...dVals)-0.02);
-        const yMax = Math.max(0.3, Math.max(...dVals)+0.02);
+        // Scala SEMPRE fissa a +-0.3°C, come richiesto: anche se un dato sporco
+        // dovesse sfuggire al filtro despike, il grafico non si "schiaccia" -
+        // quel punto verrebbe semplicemente tagliato fuori dai bordi.
+        const yMin = -0.3, yMax = 0.3;
         const deltaOpts = JSON.parse(JSON.stringify(baseOpts));
         deltaOpts.scales.y.min = yMin; deltaOpts.scales.y.max = yMax;
         new Chart(el('cDelta'), { type:'line', data:{ datasets:[
