@@ -17,10 +17,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--grn);margin-right:3px;animation:blink 2s infinite;}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
 .wrap{max-width:960px;margin:0 auto;padding:12px 10px 0;}
-.sec{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--sub);margin:14px 0 7px;padding-left:2px;}
+.sec{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--sub);margin:14px 0 7px;padding-left:2px;display:flex;align-items:center;gap:6px;justify-content:space-between;}
+.sec-l{display:flex;align-items:center;gap:6px;}
 .grid{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));}
-.card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:11px 13px;}
-.lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sub);margin-bottom:4px;}
+.card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:11px 13px;transition:border-color .3s;}
+.lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sub);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;}
 .val{font-size:1.75rem;font-weight:700;color:var(--grn);font-family:'JetBrains Mono',monospace;line-height:1;}
 .unit{font-size:.62rem;color:var(--sub);margin-top:3px;}
 .ex-tabs{display:flex;gap:4px;margin-top:8px;}
@@ -37,17 +38,48 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .pbtn.active{color:var(--acc);border-color:var(--acc);}
 .hero{grid-column:1/-1;border-color:var(--acc);padding:16px;}
 .hero-val{font-size:1.3rem;font-weight:700;color:var(--val);font-family:'JetBrains Mono',monospace;}
-.note{font-size:.62rem;color:var(--sub);margin:10px 0;font-style:italic;line-height:1.5;}
+.note{font-size:.62rem;color:var(--sub);margin:0;font-style:italic;line-height:1.5;}
 .chart-toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;}
 .ct-btn{background:var(--bg3);border:1px solid var(--brd);color:var(--sub);font-size:.68rem;padding:6px 11px;border-radius:8px;cursor:pointer;}
 .ct-btn.active{color:var(--acc);border-color:var(--acc);}
 .chart-grid{display:grid;gap:10px;grid-template-columns:1fr;}
 .chart-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:0;}
-.chart-title{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin-bottom:8px;}
+.chart-title{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;}
 .chart-wrap{position:relative;height:220px;}
 .pagenav{position:fixed;left:0;right:0;bottom:0;background:var(--bg2);border-top:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between;padding:10px 6px;z-index:200;}
 .pagenav-btn{background:var(--bg3);border:1px solid var(--brd);color:var(--acc);font-size:1.4rem;line-height:1;padding:8px 18px;border-radius:8px;text-decoration:none;user-select:none;}
 .pagenav-label{font-size:.72rem;color:var(--sub);text-align:center;flex:1;}
+
+/* Badge comfort */
+.badge{font-size:.58rem;font-weight:700;padding:2px 7px;border-radius:20px;white-space:nowrap;}
+.badge-ottimale{background:rgba(63,185,80,.15);color:var(--grn);border:1px solid var(--grn);}
+.badge-caldo{background:rgba(248,81,73,.15);color:var(--red);border:1px solid var(--red);}
+.badge-freddo{background:rgba(88,166,255,.15);color:var(--acc);border:1px solid var(--acc);}
+.badge-afa{background:rgba(227,179,65,.15);color:var(--orn);border:1px solid var(--orn);}
+.badge-secco{background:rgba(210,153,34,.15);color:var(--ylw);border:1px solid var(--ylw);}
+
+/* Info tooltip */
+.info-wrap{position:relative;display:inline-flex;}
+.info-icon{width:15px;height:15px;border-radius:50%;border:1px solid var(--sub);color:var(--sub);font-size:.6rem;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
+.info-icon:hover{color:var(--acc);border-color:var(--acc);}
+.info-pop{display:none;position:absolute;right:0;top:20px;background:var(--bg3);border:1px solid var(--brd);border-radius:8px;padding:10px 12px;width:250px;z-index:50;box-shadow:0 4px 14px rgba(0,0,0,.4);}
+.info-pop.show{display:block;}
+
+/* Gauge */
+.gauge-box{display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:center;padding:6px 0 2px;}
+.gauge-item{display:flex;flex-direction:column;align-items:center;}
+.gauge-cap{font-size:.6rem;color:var(--sub);text-transform:uppercase;letter-spacing:.07em;margin-top:2px;}
+.gauge-num{font-size:.95rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--val);margin-top:-4px;}
+
+/* Derived metrics grid */
+.mini-grid{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-top:2px;}
+.mini-card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:9px 11px;}
+.mini-lbl{font-size:.56rem;text-transform:uppercase;letter-spacing:.06em;color:var(--sub);margin-bottom:3px;}
+.mini-val{font-size:1.15rem;font-weight:700;color:var(--val);font-family:'JetBrains Mono',monospace;}
+.mini-unit{font-size:.58rem;color:var(--sub);}
+
+.overlay-toggle{display:flex;align-items:center;gap:5px;font-size:.62rem;color:var(--sub);cursor:pointer;}
+.overlay-toggle input{cursor:pointer;}
 </style>
 </head>
 <body>
@@ -63,8 +95,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <div class="wrap">
     <div class="sec">Ultimo rilievo</div>
     <div class="grid">
-        <div class="card">
-            <div class="lbl">Temperatura</div>
+        <div class="card" id="cardT">
+            <div class="lbl"><span>Temperatura</span><span class="badge" id="badgeTemp">--</span></div>
             <div class="val" id="T">--</div>
             <div class="unit">°C</div>
             <div class="ex-tabs">
@@ -74,18 +106,64 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             <div id="t_mo" class="ex-panel show"><div class="ex-row"><span class="emn" id="tMoMn_v">--</span><span class="emx" id="tMoMx_v">--</span></div><div class="ex-row"><span class="et" id="tMoMn_t"></span><span class="et" id="tMoMx_t"></span></div></div>
             <div id="t_yr" class="ex-panel"><div class="ex-row"><span class="emn" id="tYrMn_v">--</span><span class="emx" id="tYrMx_v">--</span></div><div class="ex-row"><span class="et" id="tYrMn_t"></span><span class="et" id="tYrMx_t"></span></div></div>
         </div>
-        <div class="card">
-            <div class="lbl">Umidità</div>
+        <div class="card" id="cardH">
+            <div class="lbl"><span>Umidità</span><span class="badge" id="badgeHum">--</span></div>
             <div class="val" id="H">--</div>
             <div class="unit">%</div>
+            <div class="ex-tabs">
+                <button class="ex-tab active" onclick="switchTab(this,'h','mo')">Mese</button>
+                <button class="ex-tab" onclick="switchTab(this,'h','yr')">Anno</button>
+            </div>
+            <div id="h_mo" class="ex-panel show"><div class="ex-row"><span class="emn" id="hMoMn_v">--</span><span class="emx" id="hMoMx_v">--</span></div><div class="ex-row"><span class="et" id="hMoMn_t"></span><span class="et" id="hMoMx_t"></span></div></div>
+            <div id="h_yr" class="ex-panel"><div class="ex-row"><span class="emn" id="hYrMn_v">--</span><span class="emx" id="hYrMx_v">--</span></div><div class="ex-row"><span class="et" id="hYrMn_t"></span><span class="et" id="hYrMx_t"></span></div></div>
         </div>
         <div class="card">
-            <div class="lbl">Pressione</div>
+            <div class="lbl"><span>Pressione</span></div>
             <div class="val" id="P">--</div>
             <div class="unit" id="Pmode">hPa (livello del mare)</div>
             <div class="pbtns">
                 <button class="pbtn active" id="pbSlm" onclick="setPressMode('slm')">Livello mare</button>
                 <button class="pbtn" id="pbRaw" onclick="setPressMode('raw')">Raw (stazione)</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="sec">Metriche derivate</div>
+    <div class="mini-grid">
+        <div class="mini-card">
+            <div class="mini-lbl">Punto di rugiada</div>
+            <div class="mini-val" id="dewPoint">--</div>
+            <div class="mini-unit">°C</div>
+        </div>
+        <div class="mini-card">
+            <div class="mini-lbl">Umidità assoluta</div>
+            <div class="mini-val" id="absHum">--</div>
+            <div class="mini-unit">g/m³</div>
+        </div>
+        <div class="mini-card">
+            <div class="mini-lbl">Humidex (percepita)</div>
+            <div class="mini-val" id="humidex">--</div>
+            <div class="mini-unit">°C</div>
+        </div>
+        <div class="mini-card">
+            <div class="mini-lbl">Comfort termico</div>
+            <div class="mini-val" style="font-size:.85rem;" id="comfortLabel">--</div>
+            <div class="mini-unit">indice combinato T+UR</div>
+        </div>
+    </div>
+
+    <div class="sec">Quadrante Temperatura / Umidità</div>
+    <div class="card">
+        <div class="gauge-box" id="gaugeBox">
+            <div class="gauge-item">
+                <svg id="gaugeTemp" width="150" height="95" viewBox="0 0 150 95"></svg>
+                <div class="gauge-num" id="gaugeTempVal">--°C</div>
+                <div class="gauge-cap">Temperatura</div>
+            </div>
+            <div class="gauge-item">
+                <svg id="gaugeHum" width="150" height="95" viewBox="0 0 150 95"></svg>
+                <div class="gauge-num" id="gaugeHumVal">--%</div>
+                <div class="gauge-cap">Umidità</div>
             </div>
         </div>
     </div>
@@ -98,24 +176,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         </div>
     </div>
 
-    <div class="sec">Grafici</div>
+    <div class="sec">
+        <span class="sec-l">Grafici</span>
+        <div class="info-wrap">
+            <div class="info-icon" onclick="toggleInfo()">i</div>
+            <div class="info-pop" id="infoPop">
+                Canale ThingSpeak 3211426: field1=Temperatura, field2=Umidità, field3=Pressione raw (stazione),
+                field5=Pressione a livello del mare. Estremi mese/anno calcolati a risoluzione 10 min
+                (stessa del Tetto) per essere confrontabili tra loro.
+            </div>
+        </div>
+    </div>
     <div class="chart-toolbar">
         <button class="ct-btn active" id="btn24h" onclick="setPeriod('24h')">24h</button>
         <button class="ct-btn" id="btn7d" onclick="setPeriod('7d')">7 giorni</button>
         <button class="ct-btn" id="btn30d" onclick="setPeriod('30d')">30 giorni</button>
         <button class="ct-btn" id="btnAnno" onclick="setPeriod('anno')">Anno</button>
+        <label class="overlay-toggle"><input type="checkbox" id="overlayToggle" onchange="onOverlayToggle()">Sovrapponi Tetto (inerzia termica)</label>
         <span style="font-size:.6rem;color:var(--sub);margin-left:4px;" id="chartStatus">Caricamento...</span>
     </div>
     <div class="chart-grid">
         <div class="chart-box"><div class="chart-title">🌡 Temperatura (°C)</div><div class="chart-wrap"><canvas id="chartT"></canvas></div></div>
         <div class="chart-box"><div class="chart-title">💧 Umidità (%)</div><div class="chart-wrap"><canvas id="chartH"></canvas></div></div>
         <div class="chart-box"><div class="chart-title">🔵 Pressione (hPa)</div><div class="chart-wrap"><canvas id="chartP"></canvas></div></div>
-    </div>
-
-    <div class="note">
-        Canale ThingSpeak 3211426: field1=Temperatura, field2=Umidità, field3=Pressione raw (stazione),
-        field5=Pressione a livello del mare. Estremi mese/anno calcolati a risoluzione 10 min
-        (stessa del Tetto) per essere confrontabili tra loro.
     </div>
 </div>
 
@@ -131,6 +214,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     const FIELD = { temp:1, hum:2, pRaw:3, pSlm:5 };
 
     function el(id){ return document.getElementById(id); }
+    // Arrotondamento fisso a 2 cifre decimali per tutti i valori numerici/derivati
     function fmt(v,d=2){ return (v===null||v===undefined||isNaN(v))?'--':Number(v).toFixed(d); }
     function tsDateToLocal(ca){ if(!ca||ca.length<16) return ''; const d=new Date(ca); const dd=String(d.getDate()).padStart(2,'0'); const mo=String(d.getMonth()+1).padStart(2,'0'); const hh=String(d.getHours()).padStart(2,'0'); const mm=String(d.getMinutes()).padStart(2,'0'); return dd+'/'+mo+' '+hh+':'+mm; }
 
@@ -144,6 +228,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         if(target)target.classList.add('show');
     }
 
+    function toggleInfo(){ el('infoPop').classList.toggle('show'); }
+    document.addEventListener('click', e=>{
+        const pop = el('infoPop');
+        if(pop && pop.classList.contains('show') && !e.target.closest('.info-wrap')) pop.classList.remove('show');
+    });
+
     // ─── Toggle pressione raw / livello del mare ───
     let pressMode = 'slm';
     let lastRaw = null, lastSlm = null;
@@ -154,6 +244,117 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         el('Pmode').textContent = mode==='slm' ? 'hPa (livello del mare)' : 'hPa (raw stazione)';
         const v = mode==='slm' ? lastSlm : lastRaw;
         el('P').textContent = fmt(v);
+    }
+
+    // ─── Metriche derivate: punto di rugiada, umidità assoluta, humidex, comfort ───
+    function calcDewPoint(t,rh){
+        if(isNaN(t)||isNaN(rh)||rh<=0) return NaN;
+        const b=17.62,c=243.12;
+        const alpha=Math.log(rh/100)+(b*t)/(c+t);
+        return (c*alpha)/(b-alpha);
+    }
+    function calcAbsHumidity(t,rh){
+        if(isNaN(t)||isNaN(rh)) return NaN;
+        const satVapPress=6.112*Math.exp((17.62*t)/(243.12+t));
+        return 216.7*((rh/100*satVapPress)/(273.15+t));
+    }
+    function calcHumidex(t,rh){
+        if(isNaN(t)||isNaN(rh)) return NaN;
+        const e=6.112*Math.pow(10,(7.5*t)/(237.7+t))*(rh/100);
+        return t+0.5555*(e-10);
+    }
+    function comfortInfo(t,rh){
+        // Indice combinato semplificato: temperatura + umidità relativa
+        if(isNaN(t)||isNaN(rh)) return {label:'--', cls:''};
+        if(t>=28) return {label:'Troppo Caldo', cls:'badge-caldo'};
+        if(t<=16) return {label:'Troppo Freddo', cls:'badge-freddo'};
+        if(rh>=65) return {label:'Afa Indoor', cls:'badge-afa'};
+        if(rh<35) return {label:'Aria Secca', cls:'badge-secco'};
+        if(rh>=45 && rh<=60 && t>18 && t<26) return {label:'Ottimale', cls:'badge-ottimale'};
+        return {label:'Accettabile', cls:'badge-ottimale'};
+    }
+    function tempBadge(t){
+        if(isNaN(t)) return {label:'--', cls:''};
+        if(t>28) return {label:'Alta', cls:'badge-caldo'};
+        if(t<16) return {label:'Bassa', cls:'badge-freddo'};
+        return {label:'Normale', cls:'badge-ottimale'};
+    }
+    function humBadge(rh){
+        if(isNaN(rh)) return {label:'--', cls:''};
+        if(rh>65) return {label:'Alta', cls:'badge-caldo'};
+        if(rh<35) return {label:'Secca', cls:'badge-secco'};
+        if(rh>=45 && rh<=60) return {label:'Ottimale', cls:'badge-ottimale'};
+        return {label:'Normale', cls:''};
+    }
+    function applyBadge(elId,info){
+        const b=el(elId);
+        b.textContent=info.label;
+        b.className='badge'+(info.cls?' '+info.cls:'');
+    }
+    function updateDerivedMetrics(t,rh){
+        const dp=calcDewPoint(t,rh);
+        const ah=calcAbsHumidity(t,rh);
+        const hx=calcHumidex(t,rh);
+        const cf=comfortInfo(t,rh);
+        el('dewPoint').textContent=fmt(dp);
+        el('absHum').textContent=fmt(ah);
+        el('humidex').textContent=fmt(hx);
+        el('comfortLabel').textContent=cf.label;
+        applyBadge('badgeTemp', tempBadge(t));
+        applyBadge('badgeHum', humBadge(rh));
+        // Bordo card dinamico
+        const cardT=el('cardT'), cardH=el('cardH');
+        cardT.style.borderColor = t>28?'var(--red)': t<16?'var(--acc)':'var(--brd)';
+        cardH.style.borderColor = rh>65?'var(--red)': rh<35?'var(--ylw)': (rh>=45&&rh<=60)?'var(--grn)':'var(--brd)';
+        drawGauges(t,rh);
+    }
+
+    // ─── Quadrante analogico SVG (termometro/igrometro a lancetta) ───
+    function polar(cx,cy,r,angleDeg){
+        const a=(angleDeg-180)*Math.PI/180;
+        return {x:cx+r*Math.cos(a), y:cy+r*Math.sin(a)};
+    }
+    function arcPath(cx,cy,r,startDeg,endDeg){
+        const s=polar(cx,cy,r,startDeg), e=polar(cx,cy,r,endDeg);
+        const largeArc = (endDeg-startDeg) > 180 ? 1 : 0;
+        return 'M '+s.x+' '+s.y+' A '+r+' '+r+' 0 '+largeArc+' 1 '+e.x+' '+e.y;
+    }
+    function buildGaugeSVG(min,max,zones,needleVal,unitLabel){
+        // zones: array {from,to,color} in valori reali; il quadrante copre 180°
+        const cx=75, cy=85, r=65;
+        const valToAngle = v => ((Math.max(min,Math.min(max,v))-min)/(max-min))*180;
+        let svg='';
+        zones.forEach(z=>{
+            const a1=valToAngle(z.from), a2=valToAngle(z.to);
+            svg += '<path d="'+arcPath(cx,cy,r,a1,a2)+'" stroke="'+z.color+'" stroke-width="12" fill="none" stroke-linecap="butt"/>';
+        });
+        // tacche min/max
+        svg += '<text x="'+(cx-r+2)+'" y="'+(cy+14)+'" font-size="9" fill="#8b949e">'+min+'</text>';
+        svg += '<text x="'+(cx+r-14)+'" y="'+(cy+14)+'" font-size="9" fill="#8b949e">'+max+'</text>';
+        // lancetta
+        if(!isNaN(needleVal)){
+            const ang=valToAngle(needleVal);
+            const tip=polar(cx,cy,r-16,ang);
+            svg += '<line x1="'+cx+'" y1="'+cy+'" x2="'+tip.x+'" y2="'+tip.y+'" stroke="#e6edf3" stroke-width="2.5" stroke-linecap="round"/>';
+            svg += '<circle cx="'+cx+'" cy="'+cy+'" r="4" fill="#e6edf3"/>';
+        }
+        return svg;
+    }
+    function drawGauges(t,rh){
+        const tempZones=[
+            {from:-10,to:16,color:'#58a6ff'},
+            {from:16,to:26,color:'#3fb950'},
+            {from:26,to:40,color:'#f85149'}
+        ];
+        const humZones=[
+            {from:0,to:35,color:'#d29922'},
+            {from:35,to:60,color:'#3fb950'},
+            {from:60,to:100,color:'#f85149'}
+        ];
+        el('gaugeTemp').innerHTML = buildGaugeSVG(-10,40,tempZones,t,'°C');
+        el('gaugeHum').innerHTML = buildGaugeSVG(0,100,humZones,rh,'%');
+        el('gaugeTempVal').textContent = fmt(t)+'°C';
+        el('gaugeHumVal').textContent = fmt(rh)+'%';
     }
 
     // ─── Live: dati Casa + confronto col Tetto ───
@@ -169,11 +370,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         const dEl = el('deltaText'), lEl = el('deltaLabel');
         if(ultimoTetto===null || isNaN(tCasa)){ lEl.textContent='In attesa dati...'; return; }
         const delta = tCasa - ultimoTetto;
-        const abs = Math.abs(delta).toFixed(1);
+        const abs = Math.abs(delta).toFixed(2);
         lEl.textContent = 'Dentro casa e fuori (Tetto) adesso';
         if(delta > 0.3){ dEl.textContent = 'Dentro fa più caldo di '+abs+'°C rispetto al Tetto'; }
         else if(delta < -0.3){ dEl.textContent = 'Dentro fa più fresco di '+abs+'°C rispetto al Tetto'; }
-        else { dEl.textContent = 'Temperatura dentro e fuori quasi uguale (±0.3°C)'; }
+        else { dEl.textContent = 'Temperatura dentro e fuori quasi uguale (±0.30°C)'; }
     }
 
     function median(arr){ const s=arr.filter(v=>!isNaN(v)).sort((a,b)=>a-b); if(!s.length) return NaN; const m=Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2; }
@@ -198,6 +399,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
                 el('updAgo').textContent = ago+' min';
             }
             aggiornaDelta(t);
+            updateDerivedMetrics(t,h);
         }).catch(e=>console.warn('[casa live]',e));
     }
 
@@ -241,25 +443,39 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         });
         return {mn:mn===Infinity?null:mn, mx:mx===-Infinity?null:mx, mnDt, mxDt};
     }
-    function setExt(prefix,r){
-        if(r.mn!==null){ el('t'+prefix+'Mn_v').textContent='▼ '+r.mn.toFixed(2); el('t'+prefix+'Mn_t').textContent=r.mnDt; }
-        if(r.mx!==null){ el('t'+prefix+'Mx_v').textContent='▲ '+r.mx.toFixed(2); el('t'+prefix+'Mx_t').textContent=r.mxDt; }
+    function setExt(prefix,r,target){
+        if(r.mn!==null){ el(target+prefix+'Mn_v').textContent='▼ '+r.mn.toFixed(2); el(target+prefix+'Mn_t').textContent=r.mnDt; }
+        if(r.mx!==null){ el(target+prefix+'Mx_v').textContent='▲ '+r.mx.toFixed(2); el(target+prefix+'Mx_t').textContent=r.mxDt; }
     }
     let monthDone=false, yearDone=false;
     function fetchMonth(){
         if(monthDone) return;
         const now=new Date(); const start=new Date(now.getFullYear(), now.getMonth(), 1);
-        fetchRangeSeq(start, now, 10, 15).then(feeds=>{ if(feeds.length){ setExt('Mo', calcExtremes(feeds,FIELD.temp)); monthDone=true; } });
+        fetchRangeSeq(start, now, 10, 15).then(feeds=>{
+            if(feeds.length){
+                setExt('Mo', calcExtremes(feeds,FIELD.temp), 't');
+                setExt('Mo', calcExtremes(feeds,FIELD.hum), 'h');
+                monthDone=true;
+            }
+        });
     }
     function fetchYear(){
         if(yearDone) return;
         const now=new Date(); const start=new Date(now.getFullYear(),0,1);
-        fetchRangeSeq(start, now, 10, 50).then(feeds=>{ if(feeds.length){ setExt('Yr', calcExtremes(feeds,FIELD.temp)); yearDone=true; } });
+        fetchRangeSeq(start, now, 10, 50).then(feeds=>{
+            if(feeds.length){
+                setExt('Yr', calcExtremes(feeds,FIELD.temp), 't');
+                setExt('Yr', calcExtremes(feeds,FIELD.hum), 'h');
+                yearDone=true;
+            }
+        });
     }
 
     // ─── Grafici (24h / 7d / 30d / anno) ───
     let period='24h';
     let charts={};
+    let overlayOn=false;
+    let lastCasaFeeds=[];
     function setPeriod(p){
         period=p;
         el('btn24h').classList.toggle('active',p==='24h');
@@ -268,48 +484,79 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         el('btnAnno').classList.toggle('active',p==='anno');
         loadCharts(p);
     }
-    function loadCharts(p){
-        el('chartStatus').textContent='Caricamento...';
+    function onOverlayToggle(){
+        overlayOn = el('overlayToggle').checked;
+        loadCharts(period);
+    }
+    function rangeParams(p){
         const end=new Date(); let start=new Date(); let aggMin=null, chunkDays=4;
         if(p==='24h'){ start.setHours(start.getHours()-24); aggMin=null; }
         else if(p==='7d'){ start.setDate(start.getDate()-7); aggMin=10; }
         else if(p==='30d'){ start.setDate(start.getDate()-30); aggMin=60; }
         else if(p==='anno'){ start.setFullYear(start.getFullYear()-1); aggMin=720; chunkDays=30; }
+        return {start,end,aggMin,chunkDays};
+    }
+    function fetchTettoRange(start,end,aggMin,chunkDays){
+        const ranges=[]; let cursor=new Date(start);
+        while(cursor<end){ let ce=new Date(cursor); ce.setDate(ce.getDate()+chunkDays); if(ce>end) ce=new Date(end); ranges.push([new Date(cursor),ce]); cursor=ce; }
+        let results=[];
+        return ranges.reduce((p,r)=>p.then(()=>{
+            const url='https://api.thingspeak.com/channels/'+TS_CH_TETTO+'/feeds.json?api_key='+TS_RKEY_TETTO+'&start='+r[0].toISOString()+'&end='+r[1].toISOString()+(aggMin?'&median='+aggMin:'');
+            return fetch(url).then(r2=>r2.json()).then(d=>{ results.push((d&&d.feeds)?d.feeds:[]); }).catch(()=>{ results.push([]); });
+        }),Promise.resolve()).then(()=>{
+            const merged=[].concat.apply([],results);
+            merged.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+            const seen={};
+            return merged.filter(f=>{ if(seen[f.created_at])return false; seen[f.created_at]=true; return true; });
+        });
+    }
+    function despike(arr, maxJump, half){
+        half = half || 4;
+        const out = arr.slice();
+        for(let i=0;i<arr.length;i++){
+            if(arr[i]===null) continue;
+            const lo=Math.max(0,i-half), hi=Math.min(arr.length-1,i+half);
+            const win=[];
+            for(let j=lo;j<=hi;j++){ if(j!==i && arr[j]!==null) win.push(arr[j]); }
+            if(win.length<5) continue;
+            win.sort((a,b)=>a-b);
+            const med=win[Math.floor(win.length/2)];
+            if(Math.abs(arr[i]-med)>maxJump){ out[i]=null; }
+        }
+        return out;
+    }
+    function seriesFrom(feeds, field, maxJump){
+        const raw = feeds.map(f=>(f['field'+field]===null||f['field'+field]===undefined||f['field'+field]==='')?null:parseFloat(f['field'+field]));
+        const clean = maxJump ? despike(raw, maxJump) : raw;
+        return feeds.map((f,i)=>({x:new Date(f.created_at).getTime(), y: clean[i]===null?null:Number(clean[i].toFixed(2))}));
+    }
+    function loadCharts(p){
+        el('chartStatus').textContent='Caricamento...';
+        const {start,end,aggMin,chunkDays} = rangeParams(p);
         fetchRangeSeq(start,end,aggMin,chunkDays).then(feeds=>{
             if(!feeds.length){ el('chartStatus').textContent='Nessun dato'; return; }
+            lastCasaFeeds = feeds;
             el('chartStatus').textContent='Aggiornato: '+feeds.length+' campioni';
-            // Scarta gli outlier confrontando ogni punto con la mediana di una
-            // finestra di punti vicini (non solo il vicino immediato), cosi'
-            // anche un glitch che dura piu' di un campione viene individuato.
-            function despike(arr, maxJump, half){
-                half = half || 4;
-                const out = arr.slice();
-                for(let i=0;i<arr.length;i++){
-                    if(arr[i]===null) continue;
-                    const lo=Math.max(0,i-half), hi=Math.min(arr.length-1,i+half);
-                    const win=[];
-                    for(let j=lo;j<=hi;j++){ if(j!==i && arr[j]!==null) win.push(arr[j]); }
-                    if(win.length<5) continue;
-                    win.sort((a,b)=>a-b);
-                    const med=win[Math.floor(win.length/2)];
-                    if(Math.abs(arr[i]-med)>maxJump){ out[i]=null; }
-                }
-                return out;
+            const tempDatasets = [{label:'Temperatura Casa',data:seriesFrom(feeds,FIELD.temp,2.5),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,spanGaps:false}];
+            makeChart('chartH',[{label:'Umidità',data:seriesFrom(feeds,FIELD.hum),borderColor:'#3fb950',borderWidth:2,pointRadius:0,spanGaps:false}],'%');
+            makeChart('chartP',[{label:'Pressione (l.m.)',data:seriesFrom(feeds,FIELD.pSlm,4),borderColor:'#facc15',borderWidth:2,pointRadius:0,spanGaps:false}],'hPa');
+            if(overlayOn){
+                fetchTettoRange(start,end,aggMin,chunkDays).then(tettoFeeds=>{
+                    if(tettoFeeds.length){
+                        tempDatasets.push({label:'Temperatura Tetto',data:seriesFrom(tettoFeeds,FIELD.temp,2.5),borderColor:'#f85149',borderWidth:2,pointRadius:0,spanGaps:false,borderDash:[4,3]});
+                    }
+                    makeChart('chartT',tempDatasets,'°C');
+                });
+            } else {
+                makeChart('chartT',tempDatasets,'°C');
             }
-            function series(field, maxJump){
-                const raw = feeds.map(f=>(f['field'+field]===null||f['field'+field]===undefined||f['field'+field]==='')?null:parseFloat(f['field'+field]));
-                const clean = maxJump ? despike(raw, maxJump) : raw;
-                return feeds.map((f,i)=>({x:new Date(f.created_at).getTime(), y:clean[i]}));
-            }
-            makeChart('chartT',[{label:'Temperatura',data:series(FIELD.temp,2.5),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,spanGaps:true}],'°C');
-            makeChart('chartH',[{label:'Umidità',data:series(FIELD.hum),borderColor:'#3fb950',borderWidth:2,pointRadius:0,spanGaps:true}],'%');
-            makeChart('chartP',[{label:'Pressione (l.m.)',data:series(FIELD.pSlm,4),borderColor:'#facc15',borderWidth:2,pointRadius:0,spanGaps:true}],'hPa');
         }).catch(e=>{ el('chartStatus').textContent='Errore caricamento'; console.warn(e); });
     }
     function makeChart(id,datasets,yLabel){
         const ctx=el(id); if(!ctx) return;
         const opts={ responsive:true, maintainAspectRatio:false, animation:{duration:300},
-            plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:10}, boxWidth:12, padding:8 } } },
+            plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:10}, boxWidth:12, padding:8 } },
+                tooltip:{ callbacks:{ label:function(c){ return c.dataset.label+': '+(c.parsed.y===null?'--':c.parsed.y.toFixed(2)); } } } },
             scales:{
                 x:{ type:'time', time:{displayFormats:{hour:'HH:mm',day:'dd/MM'}, tooltipFormat:'dd/MM HH:mm'}, ticks:{color:'#8b949e', font:{size:9}, maxTicksLimit:8}, grid:{color:'#1c2430'} },
                 y:{ ticks:{color:'#8b949e', font:{size:9}}, grid:{color:'#1c2430'}, title:{display:true, text:yLabel, color:'#8b949e', font:{size:9}} }
