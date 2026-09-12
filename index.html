@@ -446,7 +446,14 @@ body{padding-bottom:64px;}
     // sola appena inizia un nuovo mese/anno (il confronto e' su periodStart).
     // Si salvano solo i campi/created_at necessari agli estremi, per restare
     // leggeri e non rischiare di riempire lo spazio di storage del browser.
-    const CACHE_VER = 'v1';
+    //
+    // CACHE_VER portata a 'v2': la versione precedente della cache poteva
+    // contenere dati incompleti (scaricati quando il fetch aveva ancora il
+    // bug del limite/rate-limit di ThingSpeak). Cambiando la versione, ogni
+    // browser scarta quella cache vecchia e riparte da un download completo
+    // e corretto, invece di continuare a fidarsi ciecamente di dati
+    // parziali salvati in precedenza.
+    const CACHE_VER = 'v2';
     function cacheKey(period){ return 'meteoTetto_'+period+'_'+CACHE_VER; }
     function compactFeeds(feeds){
         return feeds.map(f=>({ created_at:f.created_at, field1:f.field1, field2:f.field2, field3:f.field3, field4:f.field4, field5:f.field5, field7:f.field7 }));
@@ -514,7 +521,9 @@ body{padding-bottom:64px;}
         // Dati GREZZI (nessuna mediana): un picco breve come 40.8°C durato
         // pochi minuti veniva "appiattito" dalla mediana a 10 min, che per
         // costruzione scarta i valori isolati. Chunk da 4 giorni per restare
-        // sotto il limite di 8000 record anche con invii ogni minuto.
+        // sotto il limite di 8000 record anche con invii ogni minuto (e se
+        // anche un chunk dovesse superare il limite, fetchThingSpeakChunk lo
+        // divide automaticamente a meta' e riprova).
         // Grazie alla cache, dal secondo caricamento in poi si scaricano
         // solo le letture nuove rispetto all'ultima volta.
         fetchPeriodCached('month', start, null, 4).then(feeds=>{
@@ -526,10 +535,12 @@ body{padding-bottom:64px;}
         const y=new Date().getFullYear();
         const start=new Date(y,0,1);
         // Dati GREZZI come per il mese: il primo caricamento dell'anno sara'
-        // piu' lento (tante richieste in sequenza, una tantum), ma dal
-        // giorno dopo in poi si scaricano solo le letture nuove tramite la
-        // cache, quindi tornera' veloce. Chunk piccoli (4 giorni) per
-        // restare sempre sotto il limite di 8000 record per richiesta.
+        // piu' lento (tante richieste in sequenza, una tantum, con piccole
+        // pause per non farsi bloccare da ThingSpeak), ma dal giorno dopo in
+        // poi si scaricano solo le letture nuove tramite la cache, quindi
+        // tornera' veloce. Chunk piccoli (4 giorni) per restare sempre sotto
+        // il limite di 8000 record per richiesta, con divisione automatica
+        // a meta' se anche un chunk da 4 giorni dovesse risultare troppo denso.
         fetchPeriodCached('year', start, null, 4).then(feeds=>{
             if(feeds && feeds.length>0){ fillTsExtremes(despikeWind(feeds),'Yr'); tsYearDone=true; }
         }).catch(e=>console.warn('[TS year]',e));
@@ -934,24 +945,76 @@ body{padding-bottom:64px;}
         charts[id]=new Chart(ctx2, { type, data:{labels:xLabels,datasets}, options:opts });
     }
 
-    // ─── Fetch ThingSpeak per grafici (con chunk) ───
+    // ─── Fetch ThingSpeak per grafici (con chunk adattivo) ───
     // Nota: si usa 'median' invece di 'average' perche' la mediana e' meno
     // sensibile a buchi/outlier nei dati (es. un campione mancante non
     // fa crollare il valore come potrebbe fare una media aritmetica).
-    function fetchThingSpeakChunk(start, end, aggMinutes, retry) {
-        // results=8000 esplicito: senza questo parametro ThingSpeak puo'
-        // limitare la risposta a un numero di record inferiore a quelli
-        // realmente presenti nell'intervallo, facendo sparire pezzi di
-        // periodo senza alcun errore visibile (probabile causa dei "buchi"
-        // nel grafico Anno).
+
+    // Piccola pausa tra una richiesta e l'altra: ThingSpeak, se bombardato
+    // troppo in fretta con richieste in sequenza, a volte risponde con un
+    // errore o un JSON vuoto (non un errore di rete). Prima il codice
+    // interpretava "nessun feed nella risposta" come "nessun dato in quel
+    // periodo" e perdeva pezzi interi senza accorgersene: era la causa
+    // principale dei "buchi" nel grafico Anno (47 campioni invece di 200+).
+    function sleep(ms) { return new Promise(function(res) { setTimeout(res, ms); }); }
+
+    // Scarica un singolo intervallo [start, end]. Se la risposta torna
+    // "piena" (>= 8000 record, il limite per richiesta di ThingSpeak),
+    // vuol dire che ci sono ancora piu' dati in quell'intervallo di quanti
+    // ThingSpeak ne possa restituire in un colpo solo: in quel caso
+    // l'intervallo viene diviso a meta' e riscaricato ricorsivamente su
+    // ciascuna meta', senza bisogno di indovinare quanto spesso invia dati
+    // la centralina (era la causa principale del massimo di 40.8°C
+    // "perso" e sostituito da un 37.7°C parziale).
+    function fetchThingSpeakChunk(start, end, aggMinutes, attempt) {
+        attempt = attempt || 0;
         var url = 'https://api.thingspeak.com/channels/' + TS_CH + '/feeds.json?api_key=' + TS_RKEY + '&start=' + start.toISOString() + '&end=' + end.toISOString() + '&results=8000';
         if (aggMinutes) url += '&median=' + aggMinutes;
-        return fetch(url).then(function(r) { return r.json(); }).then(function(data) { return (data && data.feeds) ? data.feeds : []; }).catch(function(e) {
-            // Un chunk fallito (es. richiesta scartata perche' troppo ravvicinata
-            // alle altre) veniva prima ignorato silenziosamente: ora riproviamo
-            // una volta prima di arrenderci, cosi' non spariscono interi pezzi
-            // di periodo (era la causa dei "47 campioni" invece di 200+).
-            if (!retry) { return fetchThingSpeakChunk(start, end, aggMinutes, true); }
+
+        return fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+            var feeds = (data && Array.isArray(data.feeds)) ? data.feeds : null;
+
+            // Risposta assente/malformata (es. errore o rate-limit di
+            // ThingSpeak, che risponde comunque con HTTP 200 ma senza il
+            // campo "feeds"): riprova fino a 3 volte con pausa crescente,
+            // invece di arrendersi subito e far sparire quel pezzo di
+            // periodo.
+            if (feeds === null) {
+                if (attempt < 3) {
+                    return sleep(800 * (attempt + 1)).then(function() {
+                        return fetchThingSpeakChunk(start, end, aggMinutes, attempt + 1);
+                    });
+                }
+                console.warn('[chunk] risposta non valida dopo 3 tentativi', start, end);
+                return [];
+            }
+
+            // Risposta "piena": ci sono probabilmente altri dati in questo
+            // intervallo oltre a quelli restituiti. Si divide l'intervallo
+            // a meta' e si scaricano le due meta' separatamente (in
+            // sequenza, per non farsi bloccare da ThingSpeak).
+            var durationMs = end.getTime() - start.getTime();
+            if (feeds.length >= 8000 && durationMs > 60000) {
+                var mid = new Date(start.getTime() + durationMs / 2);
+                return sleep(300).then(function() {
+                    return fetchThingSpeakChunk(start, mid, aggMinutes);
+                }).then(function(firstHalf) {
+                    return sleep(300).then(function() {
+                        return fetchThingSpeakChunk(mid, end, aggMinutes);
+                    }).then(function(secondHalf) {
+                        return firstHalf.concat(secondHalf);
+                    });
+                });
+            }
+
+            return feeds;
+        }).catch(function(e) {
+            // Errore di rete vero e proprio: stesso meccanismo di retry.
+            if (attempt < 3) {
+                return sleep(800 * (attempt + 1)).then(function() {
+                    return fetchThingSpeakChunk(start, end, aggMinutes, attempt + 1);
+                });
+            }
             console.warn('[chunk fallito]', start, end, e);
             return [];
         });
@@ -966,13 +1029,15 @@ body{padding-bottom:64px;}
             ranges.push([new Date(cursor), chunkEnd]);
             cursor = chunkEnd;
         }
-        // Richieste in sequenza (non tutte insieme): ThingSpeak scarta silenziosamente
-        // alcune risposte quando arrivano troppe richieste in parallelo sullo stesso canale.
+        // Richieste in sequenza CON PAUSA tra l'una e l'altra (necessaria
+        // per non farsi bloccare da ThingSpeak quando arrivano troppe
+        // richieste ravvicinate sullo stesso canale).
         var results = [];
-        return ranges.reduce(function(p, range) {
+        return ranges.reduce(function(p, range, idx) {
             return p.then(function() {
                 return fetchThingSpeakChunk(range[0], range[1], aggMinutes).then(function(feeds) {
                     results.push(feeds);
+                    return sleep(idx < ranges.length - 1 ? 400 : 0);
                 });
             });
         }, Promise.resolve()).then(function() {
