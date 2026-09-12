@@ -971,23 +971,34 @@ body{padding-bottom:64px;}
         var url = 'https://api.thingspeak.com/channels/' + TS_CH + '/feeds.json?api_key=' + TS_RKEY + '&start=' + start.toISOString() + '&end=' + end.toISOString() + '&results=8000';
         if (aggMinutes) url += '&median=' + aggMinutes;
 
-        return fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+        console.log('[TS chunk START]', start.toISOString(), '->', end.toISOString(),
+                    'agg=', aggMinutes, 'attempt=', attempt + 1);
+
+        return fetch(url).then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        }).then(function(data) {
             var feeds = (data && Array.isArray(data.feeds)) ? data.feeds : null;
 
-            // Risposta assente/malformata (es. errore o rate-limit di
-            // ThingSpeak, che risponde comunque con HTTP 200 ma senza il
-            // campo "feeds"): riprova fino a 3 volte con pausa crescente,
-            // invece di arrendersi subito e far sparire quel pezzo di
-            // periodo.
-            if (feeds === null) {
+            // ThingSpeak puo' rispondere con HTTP 200 e feeds=[] quando una
+            // richiesta ravvicinata viene limitata/servita male. Per il grafico
+            // storico questo non va interpretato immediatamente come "nessun
+            // dato": riproviamo fino a 3 volte.
+            if (feeds === null || feeds.length === 0) {
                 if (attempt < 3) {
+                    console.warn('[TS chunk RETRY]', start.toISOString(), '->',
+                                 end.toISOString(), 'feeds=', feeds ? feeds.length : 'null');
                     return sleep(800 * (attempt + 1)).then(function() {
                         return fetchThingSpeakChunk(start, end, aggMinutes, attempt + 1);
                     });
                 }
-                console.warn('[chunk] risposta non valida dopo 3 tentativi', start, end);
+                console.warn('[TS chunk EMPTY]', start.toISOString(), '->',
+                             end.toISOString(), 'dopo 3 retry');
                 return [];
             }
+
+            console.log('[TS chunk END]', start.toISOString(), '->', end.toISOString(),
+                        'feeds=', feeds.length);
 
             // Risposta "piena": ci sono probabilmente altri dati in questo
             // intervallo oltre a quelli restituiti. Si divide l'intervallo
@@ -1054,6 +1065,9 @@ body{padding-bottom:64px;}
 
     let chartPeriod='24h';
     let dailyAvgMode=false;
+    let chartLoadSeq=0;
+    let chartLoadBusy=false;
+
     function aggregateDaily(feeds){ const days={}; feeds.forEach(f=>{ const day=f.created_at.substring(0,10); if(!days[day])days[day]={sum:{},cnt:{},created_at:day+'T12:00:00Z'}; [1,2,3,4,5,7,8].forEach(fld=>{ const v=parseFloat(f['field'+fld]); if(!isNaN(v)){ days[day].sum[fld]=(days[day].sum[fld]||0)+v; days[day].cnt[fld]=(days[day].cnt[fld]||0)+1; } }); }); return Object.keys(days).sort().map(day=>{ const d=days[day]; const feed={created_at:d.created_at}; [1,2,3,4,5,7,8].forEach(fld=>{ feed['field'+fld]=d.cnt[fld]?(d.sum[fld]/d.cnt[fld]):null; }); return feed; }); }
     function toggleDailyAvg(){ dailyAvgMode=!dailyAvgMode; const b=el('btnDailyAvg'); if(b)b.classList.toggle('active',dailyAvgMode); loadCharts(chartPeriod); }
 
@@ -1068,8 +1082,20 @@ body{padding-bottom:64px;}
     // valido per l'API ThingSpeak: il parametro 'median' vuole i minuti).
     const AGG_ANNO_MINUTES = 720; // 12h
 
-    function loadCharts(period) {
+    function loadCharts(period, isAuto) {
+        // Il timer di aggiornamento non deve avviare una seconda richiesta
+        // annuale mentre la prima sta ancora scaricando i chunk. Un click
+        // manuale invece parte sempre e invalida il risultato precedente.
+        if (isAuto && chartLoadBusy) {
+            console.log('[charts] aggiornamento automatico saltato: fetch già in corso');
+            return;
+        }
+
+        var loadId = ++chartLoadSeq;
+        chartLoadBusy = true;
         safeSet('chartStatus', 'Caricamento...');
+        console.log('[charts] START', period, 'loadId=', loadId);
+
         var end = new Date();
         var start = new Date();
         var aggMinutes = null;
@@ -1086,18 +1112,44 @@ body{padding-bottom:64px;}
                 fetchThingSpeakRange(start, end, aggMinutes, chunkDays),
                 fetchThingSpeakRange(start, end, AGG_24H_WIND, chunkDays)
             ]).then(function(results) {
+                if (loadId !== chartLoadSeq || period !== chartPeriod) {
+                    console.log('[charts] risultato 24h ignorato: richiesta superata', loadId);
+                    return;
+                }
                 var feedsMain = results[0], feedsWind = results[1];
                 if (!feedsMain || feedsMain.length === 0) { safeSet('chartStatus', 'Errore: nessun dato'); return; }
                 buildCharts(feedsMain, period, feedsWind);
-            }).catch(function(e) { safeSet('chartStatus', 'Errore caricamento'); console.warn(e); });
+            }).catch(function(e) {
+                if (loadId === chartLoadSeq) {
+                    safeSet('chartStatus', 'Errore caricamento');
+                    console.warn(e);
+                }
+            }).finally(function() {
+                if (loadId === chartLoadSeq) chartLoadBusy = false;
+            });
             return;
         }
 
         fetchThingSpeakRange(start, end, aggMinutes, chunkDays).then(function(feeds) {
+            // Se nel frattempo l'utente ha cambiato periodo, il fetch vecchio
+            // puo' terminare dopo quello nuovo: non deve sovrascrivere il grafico.
+            if (loadId !== chartLoadSeq || period !== chartPeriod) {
+                console.log('[charts] risultato ignorato: richiesta superata', loadId,
+                            'period=', period, 'current=', chartPeriod);
+                return;
+            }
             if (!feeds || feeds.length === 0) { safeSet('chartStatus', 'Errore: nessun dato'); return; }
             if (period === '30d' && dailyAvgMode) feeds = aggregateDaily(feeds);
             buildCharts(feeds, period);
-        }).catch(function(e) { safeSet('chartStatus', 'Errore caricamento'); console.warn(e); });
+            console.log('[charts] END', period, 'loadId=', loadId, 'campioni=', feeds.length);
+        }).catch(function(e) {
+            if (loadId === chartLoadSeq) {
+                safeSet('chartStatus', 'Errore caricamento');
+                console.warn(e);
+            }
+        }).finally(function() {
+            if (loadId === chartLoadSeq) chartLoadBusy = false;
+        });
     }
 
     function setChartPeriod(p){
@@ -1110,7 +1162,7 @@ body{padding-bottom:64px;}
         if(dailyBtn){ dailyBtn.style.display=(p==='30d')?'inline-block':'none'; }
         loadCharts(p);
     }
-    setInterval(()=>loadCharts(chartPeriod), 60000);
+    setInterval(()=>loadCharts(chartPeriod, true), 60000);
 
     // ─── LIVE DATA: ultimo feed da ThingSpeak ───
     function fetchLiveData(){
