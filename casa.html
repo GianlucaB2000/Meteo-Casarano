@@ -75,6 +75,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .gl-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
 .gl-dot-real{background:#e6edf3;}
 .gl-dot-perc{background:#e3b341;}
+.gauge-value{font-size:1.05rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--val);margin-top:2px;}
+.gauge-note{font-size:.6rem;color:var(--sub);text-align:center;margin-top:10px;line-height:1.5;}
+.gauge-note.warn{color:var(--red);font-weight:600;}
+.needle-main, .needle-second{transition:transform .5s ease-out;}
 .gauge-combined{display:flex;justify-content:center;margin-top:4px;}
 .combo-badge{font-size:.72rem;font-weight:700;letter-spacing:.03em;padding:6px 16px;border-radius:20px;text-transform:uppercase;}
 .combo-freddo{background:rgba(88,166,255,.15);color:var(--acc);border:1px solid var(--acc);}
@@ -109,8 +113,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <div class="grid">
         <div class="card" id="cardT">
             <div class="lbl"><span>Temperatura</span><span class="badge" id="badgeTemp">--</span></div>
-            <div class="val" id="T">--</div>
-            <div class="unit">°C</div>
             <div class="ex-tabs">
                 <button class="ex-tab active" onclick="switchTab(this,'t','mo')">Mese</button>
                 <button class="ex-tab" onclick="switchTab(this,'t','yr')">Anno</button>
@@ -120,8 +122,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         </div>
         <div class="card" id="cardH">
             <div class="lbl"><span>Umidità</span><span class="badge" id="badgeHum">--</span></div>
-            <div class="val" id="H">--</div>
-            <div class="unit">%</div>
             <div class="ex-tabs">
                 <button class="ex-tab active" onclick="switchTab(this,'h','mo')">Mese</button>
                 <button class="ex-tab" onclick="switchTab(this,'h','yr')">Anno</button>
@@ -169,6 +169,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         <div class="gauge-box" id="gaugeBox">
             <div class="gauge-item">
                 <svg id="gaugeTemp" width="150" height="95" viewBox="0 0 150 95"></svg>
+                <div class="gauge-value" id="gaugeTempValue">-- °C</div>
                 <div class="gauge-legend">
                     <span class="gl-item"><span class="gl-dot gl-dot-real"></span>Reale</span>
                     <span class="gl-item"><span class="gl-dot gl-dot-perc"></span>Percepita</span>
@@ -177,12 +178,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             </div>
             <div class="gauge-item">
                 <svg id="gaugeHum" width="150" height="95" viewBox="0 0 150 95"></svg>
+                <div class="gauge-value" id="gaugeHumValue">-- %</div>
                 <div class="gauge-cap">Umidità</div>
             </div>
         </div>
         <div class="gauge-combined">
             <span class="combo-badge" id="comboBadge">--</span>
         </div>
+        <div class="gauge-note" id="gaugeHumidexNote"></div>
     </div>
 
     <div class="sec">Confronto con il Tetto (esterno)</div>
@@ -348,6 +351,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     }
 
     // ─── Quadrante analogico SVG (termometro/igrometro a lancetta) ───
+    // Le lancette sono elementi SVG persistenti (creati una sola volta con initGauges);
+    // ad ogni aggiornamento si ruota solo il gruppo <g> della lancetta con
+    // transform="rotate(deg cx cy)", cosi' il movimento e' realmente dinamico
+    // e animato via CSS (transition su transform).
     function polar(cx,cy,r,angleDeg){
         const a=(angleDeg-180)*Math.PI/180;
         return {x:cx+r*Math.cos(a), y:cy+r*Math.sin(a)};
@@ -357,38 +364,40 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         const largeArc = (endDeg-startDeg) > 180 ? 1 : 0;
         return 'M '+s.x+' '+s.y+' A '+r+' '+r+' 0 '+largeArc+' 1 '+e.x+' '+e.y;
     }
-    function buildGaugeSVG(min,max,zones,needleVal,secondNeedle){
-        // zones: array {from,to,color} in valori reali; il quadrante copre 180°.
-        // Le arcate sono disegnate come 3 archi contigui e ben visibili (Blu/Verde/Rosso).
-        // secondNeedle (opzionale): {val, color} per una seconda lancetta (es. Humidex).
-        const cx=75, cy=85, r=62;
-        const valToAngle = v => ((Math.max(min,Math.min(max,v))-min)/(max-min))*180;
+    const GAUGE_CX=75, GAUGE_CY=85, GAUGE_R=62;
+    // Converte un valore reale in gradi (0-180) sul quadrante, in base a min/max
+    function valToAngle(v,min,max){
+        const c=Math.max(min,Math.min(max,v));
+        return ((c-min)/(max-min))*180;
+    }
+    // Converte i gradi del quadrante (0=min sx, 90=centro alto, 180=max dx) nella
+    // rotazione CSS/SVG da applicare a una lancetta disegnata di default verticale
+    // (puntata verso l'alto, corrispondente a 90°): rotate = angolo - 90.
+    function angleToRotate(angleDeg){ return angleDeg-90; }
+
+    function buildGaugeSkeleton(min,max,zones,hasSecondNeedle){
+        const cx=GAUGE_CX, cy=GAUGE_CY, r=GAUGE_R;
         let svg='';
         // Fascia di sfondo neutra dietro le zone, per dare continuità al quadrante
         svg += '<path d="'+arcPath(cx,cy,r,0,180)+'" stroke="#242c38" stroke-width="14" fill="none" stroke-linecap="round"/>';
         zones.forEach(z=>{
-            const a1=valToAngle(z.from), a2=valToAngle(z.to);
+            const a1=valToAngle(z.from,min,max), a2=valToAngle(z.to,min,max);
             svg += '<path d="'+arcPath(cx,cy,r,a1,a2)+'" stroke="'+z.color+'" stroke-width="14" fill="none" stroke-linecap="butt"/>';
         });
         // tacche min/max
         svg += '<text x="'+(cx-r-2)+'" y="'+(cy+16)+'" font-size="9" fill="#8b949e">'+min+'</text>';
         svg += '<text x="'+(cx+r-10)+'" y="'+(cy+16)+'" font-size="9" fill="#8b949e">'+max+'</text>';
-        // seconda lancetta (es. Humidex/percepita) - piu' corta e tratteggiata, disegnata sotto la principale
-        if(secondNeedle && !isNaN(secondNeedle.val)){
-            const ang2=valToAngle(secondNeedle.val);
-            const tip2=polar(cx,cy,r-24,ang2);
-            svg += '<line x1="'+cx+'" y1="'+cy+'" x2="'+tip2.x+'" y2="'+tip2.y+'" stroke="'+secondNeedle.color+'" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="3,2"/>';
+        // seconda lancetta (es. Humidex/percepita), disegnata sotto la principale, verticale di default
+        if(hasSecondNeedle){
+            svg += '<g class="needle-second" id="__NEEDLE2__"><line x1="'+cx+'" y1="'+cy+'" x2="'+cx+'" y2="'+(cy-(r-24))+'" stroke="#e3b341" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="3,2"/></g>';
         }
-        // lancetta principale (valore reale)
-        if(!isNaN(needleVal)){
-            const ang=valToAngle(needleVal);
-            const tip=polar(cx,cy,r-18,ang);
-            svg += '<line x1="'+cx+'" y1="'+cy+'" x2="'+tip.x+'" y2="'+tip.y+'" stroke="#e6edf3" stroke-width="2.5" stroke-linecap="round"/>';
-            svg += '<circle cx="'+cx+'" cy="'+cy+'" r="4.5" fill="#e6edf3"/>';
-        }
+        // lancetta principale (valore reale), verticale di default, ruotata via transform
+        svg += '<g class="needle-main" id="__NEEDLE1__"><line x1="'+cx+'" y1="'+cy+'" x2="'+cx+'" y2="'+(cy-(r-18))+'" stroke="#e6edf3" stroke-width="2.5" stroke-linecap="round"/></g>';
+        svg += '<circle cx="'+cx+'" cy="'+cy+'" r="4.5" fill="#e6edf3"/>';
         return svg;
     }
-    function drawGauges(t,rh,hx){
+    let gaugesInit=false;
+    function initGauges(){
         const tempZones=[
             {from:-10,to:19,color:'#58a6ff'},
             {from:19,to:26.5,color:'#3fb950'},
@@ -399,8 +408,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             {from:35,to:60,color:'#3fb950'},
             {from:60,to:100,color:'#f85149'}
         ];
-        el('gaugeTemp').innerHTML = buildGaugeSVG(-10,40,tempZones,t,{val:hx,color:'#e3b341'});
-        el('gaugeHum').innerHTML = buildGaugeSVG(0,100,humZones,rh);
+        let tSvg = buildGaugeSkeleton(-10,40,tempZones,true);
+        tSvg = tSvg.replace('__NEEDLE1__','needleTempMain').replace('__NEEDLE2__','needleTempSecond');
+        el('gaugeTemp').innerHTML = tSvg;
+        let hSvg = buildGaugeSkeleton(0,100,humZones,false);
+        hSvg = hSvg.replace('__NEEDLE1__','needleHumMain');
+        el('gaugeHum').innerHTML = hSvg;
+        gaugesInit=true;
+    }
+    function setNeedle(id,deg){
+        const g=el(id);
+        if(g) g.setAttribute('transform','rotate('+deg+' '+GAUGE_CX+' '+GAUGE_CY+')');
+    }
+    function drawGauges(t,rh,hx){
+        if(!gaugesInit) initGauges();
+        if(!isNaN(t)) setNeedle('needleTempMain', angleToRotate(valToAngle(t,-10,40)));
+        if(!isNaN(hx)) setNeedle('needleTempSecond', angleToRotate(valToAngle(hx,-10,40)));
+        if(!isNaN(rh)) setNeedle('needleHumMain', angleToRotate(valToAngle(rh,0,100)));
+        // Valori numerici correnti mostrati SOLO sotto i rispettivi quadranti
+        el('gaugeTempValue').textContent = fmt(t)+' °C';
+        el('gaugeHumValue').textContent = fmt(rh)+' %';
+        // Avviso per Humidex in fascia di estremo disagio
+        const noteEl = el('gaugeHumidexNote');
+        if(!isNaN(hx) && hx>40){
+            noteEl.textContent = '⚠ Humidex '+fmt(hx)+'°C — Estremo Disagio / Rischio Colpo di Calore (soglia: >40°C)';
+            noteEl.className = 'gauge-note warn';
+        } else {
+            noteEl.textContent = 'Humidex oltre 40°C indica fascia di Estremo Disagio / Rischio Colpo di Calore.';
+            noteEl.className = 'gauge-note';
+        }
     }
 
     // ─── Live: dati Casa + confronto col Tetto ───
@@ -437,8 +473,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             const h = median(feeds.map(f=>parseFloat(f['field'+FIELD.hum])));
             lastRaw = median(feeds.map(f=>parseFloat(f['field'+FIELD.pRaw])));
             lastSlm = median(feeds.map(f=>parseFloat(f['field'+FIELD.pSlm])));
-            el('T').textContent = fmt(t);
-            el('H').textContent = fmt(h);
             el('P').textContent = fmt(pressMode==='slm' ? lastSlm : lastRaw);
             if(last.created_at){
                 const ago = Math.round((Date.now()-new Date(last.created_at).getTime())/60000);
