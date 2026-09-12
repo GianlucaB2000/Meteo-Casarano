@@ -295,6 +295,33 @@ body{padding-bottom:64px;}
 
     // ─── Trend badge: calcolato dentro fetchTs24h (vedi sotto) ───
 
+    // ─── Filtro anti-glitch vento ───
+    // Un sensore anemometro DIY puo' dare letture impossibili (es. da 10 a
+    // 50 km/h in un minuto). Scartiamo un valore se: supera un tetto di
+    // sicurezza assoluto (150 km/h, oltre il quale e' certamente un errore
+    // del sensore anche in caso di tempesta), oppure se il salto rispetto
+    // all'ultimo valore plausibile e' troppo brusco. Il valore scartato
+    // viene sostituito con l'ultimo valore plausibile, cosi' non compare
+    // ne' nei grafici ne' negli estremi (max raffica/velocita').
+    const WIND_MAX_JUMP = 30;   // km/h di differenza max tra due letture consecutive
+    const WIND_ABS_CAP = 150;   // km/h oltre il quale il dato e' scartato comunque
+    function despikeWindFeeds(feeds, field){
+        let prevVal = null;
+        return feeds.map(f=>{
+            const raw = parseFloat(f['field'+field]);
+            if(isNaN(raw)) return f;
+            const isGlitch = raw > WIND_ABS_CAP || (prevVal!==null && Math.abs(raw-prevVal) > WIND_MAX_JUMP);
+            if(isGlitch){
+                const clean = Object.assign({}, f);
+                clean['field'+field] = (prevVal!==null ? String(prevVal) : '0');
+                return clean;
+            }
+            prevVal = raw;
+            return f;
+        });
+    }
+    function despikeWind(feeds){ return despikeWindFeeds(despikeWindFeeds(feeds,4),5); }
+
     // ─── Funzioni per estremi da ThingSpeak ───
     function tsDateToLocal(ca){ if(!ca||ca.length<16) return ''; const d=new Date(ca); const dd=String(d.getDate()).padStart(2,'0'); const mo=String(d.getMonth()+1).padStart(2,'0'); const hh=String(d.getHours()).padStart(2,'0'); const mm=String(d.getMinutes()).padStart(2,'0'); return dd+'/'+mo+' '+hh+':'+mm; }
 
@@ -329,10 +356,10 @@ body{padding-bottom:64px;}
     // ─── Fetch 24h, mese, anno ───
     function fetchTs24h(){
         const start24 = new Date(Date.now()-24*3600*1000).toISOString();
-        const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+start24+'&end='+new Date().toISOString();
+        const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+start24+'&end='+new Date().toISOString()+'&results=8000';
         fetch(url).then(r=>r.json()).then(data=>{
             if(!data||!data.feeds||data.feeds.length===0) return;
-            const feeds=data.feeds;
+            const feeds=despikeWind(data.feeds);
             function calcExtremes(field){
                 let mn=Infinity,mx=-Infinity,mnDt='',mxDt='';
                 feeds.forEach(f=>{
@@ -412,27 +439,98 @@ body{padding-bottom:64px;}
         }).catch(e=>console.warn('[TS 24h]',e));
     }
 
+    // ─── Cache locale (localStorage) per mese/anno ───
+    // Idea: il primo caricamento scarica tutto il periodo; da quel momento
+    // in poi si scaricano solo i dati arrivati DOPO l'ultimo salvato, che
+    // vengono aggiunti a quelli gia' in cache. La cache viene azzerata da
+    // sola appena inizia un nuovo mese/anno (il confronto e' su periodStart).
+    // Si salvano solo i campi/created_at necessari agli estremi, per restare
+    // leggeri e non rischiare di riempire lo spazio di storage del browser.
+    const CACHE_VER = 'v1';
+    function cacheKey(period){ return 'meteoTetto_'+period+'_'+CACHE_VER; }
+    function compactFeeds(feeds){
+        return feeds.map(f=>({ created_at:f.created_at, field1:f.field1, field2:f.field2, field3:f.field3, field4:f.field4, field5:f.field5, field7:f.field7 }));
+    }
+    function loadCache(period, periodStartISO){
+        try{
+            const raw = localStorage.getItem(cacheKey(period));
+            if(!raw) return null;
+            const obj = JSON.parse(raw);
+            if(!obj || obj.periodStart !== periodStartISO || !obj.feeds || !obj.feeds.length) return null;
+            return obj;
+        }catch(e){ console.warn('[cache] lettura fallita', e); return null; }
+    }
+    function saveCache(period, periodStartISO, feeds){
+        try{
+            const compact = compactFeeds(feeds);
+            const lastTs = compact.length ? compact[compact.length-1].created_at : periodStartISO;
+            localStorage.setItem(cacheKey(period), JSON.stringify({ periodStart: periodStartISO, lastTs: lastTs, feeds: compact }));
+        }catch(e){
+            // Spazio storage esaurito o non disponibile: non e' un problema
+            // grave, semplicemente al prossimo giro si riscarichera' tutto.
+            console.warn('[cache] salvataggio fallito (spazio insufficiente?)', e);
+        }
+    }
+    function mergeFeeds(oldFeeds, newFeeds){
+        const merged = oldFeeds.concat(newFeeds);
+        merged.sort((a,b)=> new Date(a.created_at) - new Date(b.created_at));
+        const seen = {};
+        return merged.filter(f=>{ if(seen[f.created_at]) return false; seen[f.created_at]=true; return true; });
+    }
+    // Recupera un periodo (mese o anno) usando la cache quando possibile:
+    // se in cache c'e' gia' il periodo giusto, scarica solo i dati nuovi
+    // dall'ultimo timestamp salvato; altrimenti scarica tutto da zero.
+    function fetchPeriodCached(period, periodStartDate, aggMinutes, chunkDays){
+        const periodStartISO = periodStartDate.toISOString();
+        const cached = loadCache(period, periodStartISO);
+        const now = new Date();
+        if(cached){
+            const deltaStart = new Date(new Date(cached.lastTs).getTime()+1000);
+            if(deltaStart >= now){
+                // Niente di nuovo da scaricare, uso direttamente la cache.
+                return Promise.resolve(cached.feeds);
+            }
+            return fetchThingSpeakRange(deltaStart, now, aggMinutes, chunkDays).then(newFeeds=>{
+                const merged = mergeFeeds(cached.feeds, newFeeds);
+                saveCache(period, periodStartISO, merged);
+                return merged;
+            }).catch(e=>{
+                console.warn('[cache] fetch incrementale fallito, uso solo la cache esistente', e);
+                return cached.feeds;
+            });
+        }
+        return fetchThingSpeakRange(periodStartDate, now, aggMinutes, chunkDays).then(feeds=>{
+            if(feeds && feeds.length>0) saveCache(period, periodStartISO, feeds);
+            return feeds;
+        });
+    }
+
     let tsMonthDone=false, tsYearDone=false;
     function fetchTsMonth(){
         if(tsMonthDone) return;
         const now=new Date();
         const y=now.getFullYear(), mo=now.getMonth()+1;
         const start=new Date(y, mo-1, 1);
-        // Stessa risoluzione (10 min) usata per l'anno: cosi' gli estremi sono
-        // confrontabili tra i due periodi (prima mese=15min e anno=12h davano
-        // massimi/minimi incoerenti tra loro).
-        fetchThingSpeakRange(start, new Date(), 10, 15).then(feeds=>{
-            if(feeds && feeds.length>0){ fillTsExtremes(feeds,'Mo'); tsMonthDone=true; }
+        // Dati GREZZI (nessuna mediana): un picco breve come 40.8°C durato
+        // pochi minuti veniva "appiattito" dalla mediana a 10 min, che per
+        // costruzione scarta i valori isolati. Chunk da 4 giorni per restare
+        // sotto il limite di 8000 record anche con invii ogni minuto.
+        // Grazie alla cache, dal secondo caricamento in poi si scaricano
+        // solo le letture nuove rispetto all'ultima volta.
+        fetchPeriodCached('month', start, null, 4).then(feeds=>{
+            if(feeds && feeds.length>0){ fillTsExtremes(despikeWind(feeds),'Mo'); tsMonthDone=true; }
         }).catch(e=>console.warn('[TS month]',e));
     }
     function fetchTsYear(){
         if(tsYearDone) return;
         const y=new Date().getFullYear();
         const start=new Date(y,0,1);
-        // Stessa risoluzione (10 min) del mese, spezzata in blocchi da 50 giorni
-        // per restare sotto il limite di 8000 record per richiesta.
-        fetchThingSpeakRange(start, new Date(), 10, 50).then(feeds=>{
-            if(feeds && feeds.length>0){ fillTsExtremes(feeds,'Yr'); tsYearDone=true; }
+        // Un anno intero di dati grezzi sarebbe troppo pesante da tenere in
+        // cache nel browser, quindi qui si usa una mediana a 10 min. Anche
+        // qui, dal secondo caricamento in poi si scaricano solo i dati
+        // nuovi rispetto all'ultima volta.
+        fetchPeriodCached('year', start, 10, 50).then(feeds=>{
+            if(feeds && feeds.length>0){ fillTsExtremes(despikeWind(feeds),'Yr'); tsYearDone=true; }
         }).catch(e=>console.warn('[TS year]',e));
     }
     setTimeout(fetchTsMonth, 4000);
@@ -680,6 +778,7 @@ body{padding-bottom:64px;}
     let windMode='both';
     const WR_HIST_MAX=120;
     let lastDir=0, lastSpeed=0;
+    let lastLiveV=null, lastLiveG=null; // ultima lettura live plausibile, per il filtro anti-glitch
 
     function setWindMode(m){
         windMode=m;
@@ -790,8 +889,9 @@ body{padding-bottom:64px;}
         var pData = despike(pDataRaw.map(function(p){ if(p.y===null||p.y<940||p.y>1050) return {x:p.x,y:null}; return p; }), 4);
         // Il vento usa sempre la risoluzione fine (windFeeds, valorizzato solo
         // nella vista 24h); se windFeeds non e' passato si ricade su 'feeds'.
-        var vData = toTimeSeriesFrom(windFeeds || feeds, 4);
-        var gData = toTimeSeriesFrom(windFeeds || feeds, 5);
+        var windSrc = despikeWind(windFeeds || feeds);
+        var vData = toTimeSeriesFrom(windSrc, 4);
+        var gData = toTimeSeriesFrom(windSrc, 5);
         var lData = toTimeSeries(7).map(function(p){ return { x: p.x, y: (p.y===null)?null:Math.max(p.y,0.01) }; });
         // La pioggia accumulata non puo' mai essere negativa (e' un contatore che
         // sale durante il giorno e si azzera a mezzanotte): eventuali valori
@@ -838,7 +938,12 @@ body{padding-bottom:64px;}
     // sensibile a buchi/outlier nei dati (es. un campione mancante non
     // fa crollare il valore come potrebbe fare una media aritmetica).
     function fetchThingSpeakChunk(start, end, aggMinutes, retry) {
-        var url = 'https://api.thingspeak.com/channels/' + TS_CH + '/feeds.json?api_key=' + TS_RKEY + '&start=' + start.toISOString() + '&end=' + end.toISOString();
+        // results=8000 esplicito: senza questo parametro ThingSpeak puo'
+        // limitare la risposta a un numero di record inferiore a quelli
+        // realmente presenti nell'intervallo, facendo sparire pezzi di
+        // periodo senza alcun errore visibile (probabile causa dei "buchi"
+        // nel grafico Anno).
+        var url = 'https://api.thingspeak.com/channels/' + TS_CH + '/feeds.json?api_key=' + TS_RKEY + '&start=' + start.toISOString() + '&end=' + end.toISOString() + '&results=8000';
         if (aggMinutes) url += '&median=' + aggMinutes;
         return fetch(url).then(function(r) { return r.json(); }).then(function(data) { return (data && data.feeds) ? data.feeds : []; }).catch(function(e) {
             // Un chunk fallito (es. richiesta scartata perche' troppo ravvicinata
@@ -951,8 +1056,17 @@ body{padding-bottom:64px;}
             d.H = parseFloat(feed.field2);
             d.Pslp = parseFloat(feed.field3);
             d.P = parseFloat(feed.field3);
-            d.V = parseFloat(feed.field4) || 0;
-            d.G = parseFloat(feed.field5) || 0;
+            let vRaw = parseFloat(feed.field4) || 0;
+            let gRaw = parseFloat(feed.field5) || 0;
+            // Stesso filtro anti-glitch usato per grafici/estremi: se il
+            // salto rispetto all'ultima lettura plausibile e' troppo brusco
+            // (o il valore e' assurdo), si scarta e si tiene l'ultimo valore
+            // buono, cosi' compasso e card non "saltano" per un errore sensore.
+            if(lastLiveV!==null && (vRaw>WIND_ABS_CAP || Math.abs(vRaw-lastLiveV)>WIND_MAX_JUMP)) vRaw = lastLiveV;
+            if(lastLiveG!==null && (gRaw>WIND_ABS_CAP || Math.abs(gRaw-lastLiveG)>WIND_MAX_JUMP)) gRaw = lastLiveG;
+            lastLiveV = vRaw; lastLiveG = gRaw;
+            d.V = vRaw;
+            d.G = gRaw;
             d.D = parseFloat(feed.field6) || 0;
             d.L = parseFloat(feed.field7) || 0;
             d.R = parseFloat(feed.field8) || 0;
