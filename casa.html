@@ -70,6 +70,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .gauge-item{display:flex;flex-direction:column;align-items:center;}
 .gauge-cap{font-size:.6rem;color:var(--sub);text-transform:uppercase;letter-spacing:.07em;margin-top:2px;}
 .gauge-num{font-size:.95rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--val);margin-top:-4px;}
+.gauge-combined{display:flex;justify-content:center;margin-top:4px;}
+.combo-badge{font-size:.72rem;font-weight:700;letter-spacing:.03em;padding:6px 16px;border-radius:20px;text-transform:uppercase;}
+.combo-freddo{background:rgba(88,166,255,.15);color:var(--acc);border:1px solid var(--acc);}
+.combo-secco{background:rgba(210,153,34,.15);color:var(--ylw);border:1px solid var(--ylw);}
+.combo-ottimale{background:rgba(63,185,80,.15);color:var(--grn);border:1px solid var(--grn);}
+.combo-afoso{background:rgba(227,179,65,.15);color:var(--orn);border:1px solid var(--orn);}
+.combo-caldo{background:rgba(248,81,73,.15);color:var(--red);border:1px solid var(--red);}
 
 /* Derived metrics grid */
 .mini-grid{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-top:2px;}
@@ -165,6 +172,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
                 <div class="gauge-num" id="gaugeHumVal">--%</div>
                 <div class="gauge-cap">Umidità</div>
             </div>
+        </div>
+        <div class="gauge-combined">
+            <span class="combo-badge" id="comboBadge">--</span>
         </div>
     </div>
 
@@ -264,7 +274,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         return t+0.5555*(e-10);
     }
     function comfortInfo(t,rh){
-        // Indice combinato semplificato: temperatura + umidità relativa
+        // Indice combinato semplificato: temperatura + umidità relativa (per i badge sulle card)
         if(isNaN(t)||isNaN(rh)) return {label:'--', cls:''};
         if(t>=28) return {label:'Troppo Caldo', cls:'badge-caldo'};
         if(t<=16) return {label:'Troppo Freddo', cls:'badge-freddo'};
@@ -272,6 +282,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         if(rh<35) return {label:'Aria Secca', cls:'badge-secco'};
         if(rh>=45 && rh<=60 && t>18 && t<26) return {label:'Ottimale', cls:'badge-ottimale'};
         return {label:'Accettabile', cls:'badge-ottimale'};
+    }
+    // ─── Logica di comfort combinato (T + UR + Humidex) per il badge sotto i quadranti ───
+    // Ordine di valutazione: CALDO AFA > UMIDO/AFOSO > FREDDO > SECCO > OTTIMALE > Nella norma
+    function combinedComfort(t,rh,hx){
+        if(isNaN(t)||isNaN(rh)) return {label:'--', cls:''};
+        if(t>26.5 || (!isNaN(hx) && hx>=34)) return {label:'Caldo Afa', cls:'combo-caldo'};
+        if(t>=24.5 && t<=26.5 && rh>60) return {label:'Umido / Afoso', cls:'combo-afoso'};
+        if(t<19) return {label:'Freddo', cls:'combo-freddo'};
+        if(rh<35) return {label:'Secco', cls:'combo-secco'};
+        if(t>=20 && t<=24.5 && rh>=40 && rh<=60) return {label:'Si Sta Bene', cls:'combo-ottimale'};
+        return {label:'Nella Norma', cls:'combo-ottimale'};
     }
     function tempBadge(t){
         if(isNaN(t)) return {label:'--', cls:''};
@@ -307,6 +328,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         cardT.style.borderColor = t>28?'var(--red)': t<16?'var(--acc)':'var(--brd)';
         cardH.style.borderColor = rh>65?'var(--red)': rh<35?'var(--ylw)': (rh>=45&&rh<=60)?'var(--grn)':'var(--brd)';
         drawGauges(t,rh);
+        const combo=combinedComfort(t,rh,hx);
+        const comboEl=el('comboBadge');
+        comboEl.textContent=combo.label.toUpperCase();
+        comboEl.className='combo-badge'+(combo.cls?' '+combo.cls:'');
     }
 
     // ─── Quadrante analogico SVG (termometro/igrometro a lancetta) ───
@@ -320,31 +345,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         return 'M '+s.x+' '+s.y+' A '+r+' '+r+' 0 '+largeArc+' 1 '+e.x+' '+e.y;
     }
     function buildGaugeSVG(min,max,zones,needleVal,unitLabel){
-        // zones: array {from,to,color} in valori reali; il quadrante copre 180°
-        const cx=75, cy=85, r=65;
+        // zones: array {from,to,color} in valori reali; il quadrante copre 180°.
+        // Le arcate sono disegnate come 3 archi contigui e ben visibili (Blu/Verde/Rosso).
+        const cx=75, cy=85, r=62;
         const valToAngle = v => ((Math.max(min,Math.min(max,v))-min)/(max-min))*180;
         let svg='';
+        // Fascia di sfondo neutra dietro le zone, per dare continuità al quadrante
+        svg += '<path d="'+arcPath(cx,cy,r,0,180)+'" stroke="#242c38" stroke-width="14" fill="none" stroke-linecap="round"/>';
         zones.forEach(z=>{
             const a1=valToAngle(z.from), a2=valToAngle(z.to);
-            svg += '<path d="'+arcPath(cx,cy,r,a1,a2)+'" stroke="'+z.color+'" stroke-width="12" fill="none" stroke-linecap="butt"/>';
+            svg += '<path d="'+arcPath(cx,cy,r,a1,a2)+'" stroke="'+z.color+'" stroke-width="14" fill="none" stroke-linecap="butt"/>';
         });
         // tacche min/max
-        svg += '<text x="'+(cx-r+2)+'" y="'+(cy+14)+'" font-size="9" fill="#8b949e">'+min+'</text>';
-        svg += '<text x="'+(cx+r-14)+'" y="'+(cy+14)+'" font-size="9" fill="#8b949e">'+max+'</text>';
+        svg += '<text x="'+(cx-r-2)+'" y="'+(cy+16)+'" font-size="9" fill="#8b949e">'+min+'</text>';
+        svg += '<text x="'+(cx+r-10)+'" y="'+(cy+16)+'" font-size="9" fill="#8b949e">'+max+'</text>';
         // lancetta
         if(!isNaN(needleVal)){
             const ang=valToAngle(needleVal);
-            const tip=polar(cx,cy,r-16,ang);
+            const tip=polar(cx,cy,r-18,ang);
             svg += '<line x1="'+cx+'" y1="'+cy+'" x2="'+tip.x+'" y2="'+tip.y+'" stroke="#e6edf3" stroke-width="2.5" stroke-linecap="round"/>';
-            svg += '<circle cx="'+cx+'" cy="'+cy+'" r="4" fill="#e6edf3"/>';
+            svg += '<circle cx="'+cx+'" cy="'+cy+'" r="4.5" fill="#e6edf3"/>';
         }
         return svg;
     }
     function drawGauges(t,rh){
         const tempZones=[
-            {from:-10,to:16,color:'#58a6ff'},
-            {from:16,to:26,color:'#3fb950'},
-            {from:26,to:40,color:'#f85149'}
+            {from:-10,to:19,color:'#58a6ff'},
+            {from:19,to:26.5,color:'#3fb950'},
+            {from:26.5,to:40,color:'#f85149'}
         ];
         const humZones=[
             {from:0,to:35,color:'#d29922'},
