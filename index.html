@@ -441,9 +441,10 @@ body{padding-bottom:64px;}
     // ─── Cache locale per estremi (mese per mese) ───
     // IMPORTANTE: per gli estremi esatti non serve conservare milioni di letture.
     // Salviamo solo min/max + timestamp di ogni mese e, per il mese corrente,
-    // l'ultimo timestamp ricevuto. In questo modo il primo recupero storico puo'
-    // essere lento, ma le aperture successive sono quasi immediate.
-    const CACHE_VER = 'v3';
+    // l'ultimo timestamp ricevuto. Lo storico viene letto a mediana di 60 minuti
+    // per evitare di scaricare milioni di campioni: gli estremi storici sono quindi
+    // estremi delle letture aggregate, non dei singoli campioni grezzi.
+    const CACHE_VER = 'v6';
     function cacheKey(period){ return 'meteoTetto_'+period+'_'+CACHE_VER; }
     function monthKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
     function monthCacheKey(d){ return cacheKey('extmonth_'+monthKey(d)); }
@@ -501,7 +502,7 @@ body{padding-bottom:64px;}
             }
         }
 
-        monthFetchLocks[key]=fetchThingSpeakRange(fetchStart,monthEnd,null,4).then(function(feeds){
+        monthFetchLocks[key]=fetchThingSpeakRange(fetchStart,monthEnd,60,31).then(function(feeds){
             feeds=despikeWind(feeds||[]);
             const summary=summarizeFeeds(feeds,base);
             const lastTs=feeds.length ? feeds[feeds.length-1].created_at : (cached&&cached.lastTs ? cached.lastTs : (summary[1].mxDt||monthStart.toISOString()));
@@ -515,7 +516,6 @@ body{padding-bottom:64px;}
 
     function combineSummaries(list){
         let out=emptyExtSummary();
-        list.forEach(obj=>{ if(obj&&obj.summary) out=summarizeFeeds(Object.keys(obj.summary).flatMap(()=>[]),out); });
         // Somma min/max direttamente, senza riscaricare le letture.
         list.forEach(obj=>{
             if(!obj||!obj.summary) return;
@@ -1093,41 +1093,93 @@ body{padding-bottom:64px;}
 
     let chartPeriod='24h';
 
-    // ─── Grafico Anno con cache mese per mese ───
-    // Il grafico usa una mediana di 12 ore, quindi sono sufficienti poche
-    // decine di punti per mese. I mesi chiusi restano in cache per sempre;
-    // viene aggiornato solo il mese corrente.
-    const AGG_ANNO_MINUTES = 720;
+    // ─── Grafico Anno ───
+    // IMPORTANTE: "Anno" = ultimi 365 giorni, non anno solare.
+    // La cache e' suddivisa per mese, ma il mese corrente viene sempre
+    // aggiornato. Un mese storico viene riutilizzato solo se e' stato
+    // scaricato completamente.
+    const AGG_ANNO_MINUTES = 1440; // 1 punto/giorno: massimo ~365 punti
+
     function loadChartMonthCache(d){
-        try{ const raw=localStorage.getItem(chartMonthCacheKey(d)); return raw?JSON.parse(raw):null; }
-        catch(e){ console.warn('[chart cache] lettura fallita',e); return null; }
+        try{
+            const raw=localStorage.getItem(chartMonthCacheKey(d));
+            return raw?JSON.parse(raw):null;
+        }catch(e){ console.warn('[chart cache] lettura fallita',e); return null; }
     }
     function saveChartMonthCache(d,feeds){
-        try{ localStorage.setItem(chartMonthCacheKey(d),JSON.stringify({month:monthKey(d),feeds:feeds||[]})); }
-        catch(e){ console.warn('[chart cache] salvataggio fallito',e); }
+        try{
+            localStorage.setItem(chartMonthCacheKey(d),JSON.stringify({
+                month:monthKey(d), feeds:feeds||[], complete:true
+            }));
+        }catch(e){ console.warn('[chart cache] salvataggio fallito',e); }
     }
+
     const chartMonthLocks={};
-    function fetchChartMonthCached(monthStart){
-        const key=monthKey(monthStart), current=isCurrentMonth(monthStart);
+
+    function fetchChartMonthCached(monthStart, monthEnd){
+        const key=monthKey(monthStart);
         if(chartMonthLocks[key]) return chartMonthLocks[key];
+
+        const current=isCurrentMonth(monthStart);
         const cached=loadChartMonthCache(monthStart);
-        if(cached && !current) return Promise.resolve(cached.feeds||[]);
-        const monthEnd=current?new Date():new Date(monthStart.getFullYear(),monthStart.getMonth()+1,1);
-        chartMonthLocks[key]=fetchThingSpeakRange(new Date(monthStart),monthEnd,AGG_ANNO_MINUTES,30)
-            .then(function(feeds){ saveChartMonthCache(monthStart,feeds||[]); return feeds||[]; })
-            .finally(function(){ delete chartMonthLocks[key]; });
+
+        // I mesi chiusi possono essere riutilizzati.
+        if(cached && cached.complete && !current){
+            return Promise.resolve(cached.feeds||[]);
+        }
+
+        // Per il mese corrente si riscarica il mese intero: e' piccolo
+        // e impedisce che un buco causato da una risposta vuota resti
+        // congelato nella cache.
+        chartMonthLocks[key]=fetchThingSpeakRange(
+            new Date(monthStart),
+            new Date(monthEnd),
+            AGG_ANNO_MINUTES,
+            31
+        ).then(function(feeds){
+            feeds=feeds||[];
+            saveChartMonthCache(monthStart,feeds);
+            return feeds;
+        }).finally(function(){ delete chartMonthLocks[key]; });
+
         return chartMonthLocks[key];
     }
+
     function fetchYearChartCached(){
-        const y=new Date().getFullYear();
+        const now=new Date();
+        const yearAgo=new Date(now.getTime()-365*24*60*60*1000);
+
+        // Costruiamo i mesi che intersecano gli ultimi 365 giorni.
+        let cursor=new Date(yearAgo.getFullYear(),yearAgo.getMonth(),1);
         const months=[];
-        for(let m=0;m<=new Date().getMonth();m++) months.push(new Date(y,m,1));
-        return months.reduce(function(p,monthStart){
-            return p.then(function(acc){ return fetchChartMonthCached(monthStart).then(function(feeds){ return acc.concat(feeds); }); });
+        while(cursor<now){
+            const ms=new Date(cursor);
+            const me=new Date(cursor.getFullYear(),cursor.getMonth()+1,1);
+            const from=ms<yearAgo?new Date(yearAgo):ms;
+            const to=me>now?new Date(now):me;
+            months.push([from,to]);
+            cursor=me;
+        }
+
+        return months.reduce(function(p,range){
+            return p.then(function(acc){
+                return fetchChartMonthCached(range[0],range[1]).then(function(feeds){
+                    // Tagliamo eventuali dati fuori dalla finestra esatta.
+                    const filtered=(feeds||[]).filter(function(f){
+                        const t=new Date(f.created_at);
+                        return t>=yearAgo && t<=now;
+                    });
+                    return acc.concat(filtered);
+                });
+            });
         },Promise.resolve([])).then(function(feeds){
             feeds.sort(function(a,b){return new Date(a.created_at)-new Date(b.created_at);});
             const seen={};
-            return feeds.filter(function(f){ if(seen[f.created_at]) return false; seen[f.created_at]=true; return true; });
+            return feeds.filter(function(f){
+                if(seen[f.created_at]) return false;
+                seen[f.created_at]=true;
+                return true;
+            });
         });
     }
 
@@ -1146,7 +1198,7 @@ body{padding-bottom:64px;}
         if(period==='anno') promise=fetchYearChartCached();
         else if(period==='24h'){
             promise=Promise.all([
-                fetchThingSpeakRange(start,end,null,chunkDays),
+                fetchThingSpeakRange(start,end,1,chunkDays),
                 fetchThingSpeakRange(start,end,10,chunkDays)
             ]).then(function(r){ return {main:r[0],wind:r[1]}; });
         } else promise=fetchThingSpeakRange(start,end,aggMinutes,chunkDays).then(function(f){ return {main:f,wind:null}; });
@@ -1158,7 +1210,13 @@ body{padding-bottom:64px;}
             else { feeds=res; }
             if(!feeds || feeds.length===0){ safeSet('chartStatus','Nessun dato'); return; }
             buildCharts(feeds,period,windFeeds);
-            safeSet('chartStatus','Aggiornato: '+feeds.length+' campioni');
+            if(period==='anno' && feeds.length){
+                const first=new Date(feeds[0].created_at);
+                const last=new Date(feeds[feeds.length-1].created_at);
+                safeSet('chartStatus','Aggiornato: '+feeds.length+' campioni · mediana giornaliera · '+tsDateToLocal(feeds[0].created_at)+' → '+tsDateToLocal(feeds[feeds.length-1].created_at));
+            } else {
+                safeSet('chartStatus','Aggiornato: '+feeds.length+' campioni');
+            }
         }).catch(function(e){
             if(loadId===chartLoadSeq) safeSet('chartStatus','Errore caricamento');
             console.warn('[charts]',e);
