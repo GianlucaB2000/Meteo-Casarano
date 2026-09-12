@@ -70,6 +70,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .gauge-item{display:flex;flex-direction:column;align-items:center;}
 .gauge-cap{font-size:.6rem;color:var(--sub);text-transform:uppercase;letter-spacing:.07em;margin-top:2px;}
 .gauge-num{font-size:.95rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--val);margin-top:-4px;}
+.gauge-legend{display:flex;gap:10px;margin-top:2px;}
+.gl-item{display:flex;align-items:center;gap:4px;font-size:.58rem;color:var(--sub);}
+.gl-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+.gl-dot-real{background:#e6edf3;}
+.gl-dot-perc{background:#e3b341;}
 .gauge-combined{display:flex;justify-content:center;margin-top:4px;}
 .combo-badge{font-size:.72rem;font-weight:700;letter-spacing:.03em;padding:6px 16px;border-radius:20px;text-transform:uppercase;}
 .combo-freddo{background:rgba(88,166,255,.15);color:var(--acc);border:1px solid var(--acc);}
@@ -159,17 +164,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         </div>
     </div>
 
-    <div class="sec">Quadrante Temperatura / Umidità</div>
+    <div class="sec">Comfort Temperatura / Umidità</div>
     <div class="card">
         <div class="gauge-box" id="gaugeBox">
             <div class="gauge-item">
                 <svg id="gaugeTemp" width="150" height="95" viewBox="0 0 150 95"></svg>
-                <div class="gauge-num" id="gaugeTempVal">--°C</div>
-                <div class="gauge-cap">Temperatura</div>
+                <div class="gauge-legend">
+                    <span class="gl-item"><span class="gl-dot gl-dot-real"></span>Reale</span>
+                    <span class="gl-item"><span class="gl-dot gl-dot-perc"></span>Percepita</span>
+                </div>
+                <div class="gauge-cap">Temp. Reale vs Percepita</div>
             </div>
             <div class="gauge-item">
                 <svg id="gaugeHum" width="150" height="95" viewBox="0 0 150 95"></svg>
-                <div class="gauge-num" id="gaugeHumVal">--%</div>
                 <div class="gauge-cap">Umidità</div>
             </div>
         </div>
@@ -333,7 +340,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         const cardT=el('cardT'), cardH=el('cardH');
         cardT.style.borderColor = t>28?'var(--red)': t<16?'var(--acc)':'var(--brd)';
         cardH.style.borderColor = rh>65?'var(--red)': rh<35?'var(--ylw)': (rh>=45&&rh<=60)?'var(--grn)':'var(--brd)';
-        drawGauges(t,rh);
+        drawGauges(t,rh,hx);
         const combo=combinedComfort(t,rh,hx);
         const comboEl=el('comboBadge');
         comboEl.textContent=combo.label.toUpperCase();
@@ -350,9 +357,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         const largeArc = (endDeg-startDeg) > 180 ? 1 : 0;
         return 'M '+s.x+' '+s.y+' A '+r+' '+r+' 0 '+largeArc+' 1 '+e.x+' '+e.y;
     }
-    function buildGaugeSVG(min,max,zones,needleVal,unitLabel){
+    function buildGaugeSVG(min,max,zones,needleVal,secondNeedle){
         // zones: array {from,to,color} in valori reali; il quadrante copre 180°.
         // Le arcate sono disegnate come 3 archi contigui e ben visibili (Blu/Verde/Rosso).
+        // secondNeedle (opzionale): {val, color} per una seconda lancetta (es. Humidex).
         const cx=75, cy=85, r=62;
         const valToAngle = v => ((Math.max(min,Math.min(max,v))-min)/(max-min))*180;
         let svg='';
@@ -365,7 +373,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         // tacche min/max
         svg += '<text x="'+(cx-r-2)+'" y="'+(cy+16)+'" font-size="9" fill="#8b949e">'+min+'</text>';
         svg += '<text x="'+(cx+r-10)+'" y="'+(cy+16)+'" font-size="9" fill="#8b949e">'+max+'</text>';
-        // lancetta
+        // seconda lancetta (es. Humidex/percepita) - piu' corta e tratteggiata, disegnata sotto la principale
+        if(secondNeedle && !isNaN(secondNeedle.val)){
+            const ang2=valToAngle(secondNeedle.val);
+            const tip2=polar(cx,cy,r-24,ang2);
+            svg += '<line x1="'+cx+'" y1="'+cy+'" x2="'+tip2.x+'" y2="'+tip2.y+'" stroke="'+secondNeedle.color+'" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="3,2"/>';
+        }
+        // lancetta principale (valore reale)
         if(!isNaN(needleVal)){
             const ang=valToAngle(needleVal);
             const tip=polar(cx,cy,r-18,ang);
@@ -374,7 +388,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         }
         return svg;
     }
-    function drawGauges(t,rh){
+    function drawGauges(t,rh,hx){
         const tempZones=[
             {from:-10,to:19,color:'#58a6ff'},
             {from:19,to:26.5,color:'#3fb950'},
@@ -385,10 +399,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             {from:35,to:60,color:'#3fb950'},
             {from:60,to:100,color:'#f85149'}
         ];
-        el('gaugeTemp').innerHTML = buildGaugeSVG(-10,40,tempZones,t,'°C');
-        el('gaugeHum').innerHTML = buildGaugeSVG(0,100,humZones,rh,'%');
-        el('gaugeTempVal').textContent = fmt(t)+'°C';
-        el('gaugeHumVal').textContent = fmt(rh)+'%';
+        el('gaugeTemp').innerHTML = buildGaugeSVG(-10,40,tempZones,t,{val:hx,color:'#e3b341'});
+        el('gaugeHum').innerHTML = buildGaugeSVG(0,100,humZones,rh);
     }
 
     // ─── Live: dati Casa + confronto col Tetto ───
@@ -571,6 +583,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         const clean = maxJump ? despike(raw, maxJump) : raw;
         return feeds.map((f,i)=>({x:new Date(f.created_at).getTime(), y: clean[i]===null?null:Number(clean[i].toFixed(2))}));
     }
+    function humidexSeriesFrom(feeds){
+        // Calcola l'Humidex (temperatura percepita) punto per punto dalla coppia T/UR di ogni campione
+        const tRaw = feeds.map(f=>(f['field'+FIELD.temp]===null||f['field'+FIELD.temp]===undefined||f['field'+FIELD.temp]==='')?null:parseFloat(f['field'+FIELD.temp]));
+        const hRaw = feeds.map(f=>(f['field'+FIELD.hum]===null||f['field'+FIELD.hum]===undefined||f['field'+FIELD.hum]==='')?null:parseFloat(f['field'+FIELD.hum]));
+        const tClean = despike(tRaw, 2.5);
+        const hClean = hRaw;
+        return feeds.map((f,i)=>{
+            const t=tClean[i], h=hClean[i];
+            const hx = (t===null||h===null) ? null : calcHumidex(t,h);
+            return {x:new Date(f.created_at).getTime(), y: (hx===null||isNaN(hx))?null:Number(hx.toFixed(2))};
+        });
+    }
     function loadCharts(p){
         el('chartStatus').textContent='Caricamento...';
         const {start,end,aggMin,chunkDays} = rangeParams(p);
@@ -578,7 +602,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             if(!feeds.length){ el('chartStatus').textContent='Nessun dato'; return; }
             lastCasaFeeds = feeds;
             el('chartStatus').textContent='Aggiornato: '+feeds.length+' campioni';
-            const tempDatasets = [{label:'Temperatura Casa',data:seriesFrom(feeds,FIELD.temp,2.5),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,spanGaps:true}];
+            const tempDatasets = [
+                {label:'Temperatura Casa',data:seriesFrom(feeds,FIELD.temp,2.5),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,spanGaps:true},
+                {label:'Humidex (percepita)',data:humidexSeriesFrom(feeds),borderColor:'#e3b341',borderWidth:1.5,pointRadius:0,spanGaps:true,borderDash:[5,3]}
+            ];
             makeChart('chartH',[{label:'Umidità',data:seriesFrom(feeds,FIELD.hum),borderColor:'#3fb950',borderWidth:2,pointRadius:0,spanGaps:true}],'%');
             makeChart('chartP',[{label:'Pressione (l.m.)',data:seriesFrom(feeds,FIELD.pSlm,4),borderColor:'#facc15',borderWidth:2,pointRadius:0,spanGaps:true}],'hPa');
             if(overlayOn){
