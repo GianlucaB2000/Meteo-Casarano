@@ -222,6 +222,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     const TS_CH_CASA = 3211426, TS_RKEY_CASA = '';
     const TS_CH_TETTO = 3217870, TS_RKEY_TETTO = 'E1WOMQU43G4GNNXI';
     const FIELD = { temp:1, hum:2, pRaw:3, pSlm:5 };
+    // Versione cache: incrementarla forza il browser a non riutilizzare risposte
+    // HTTP precedenti (es. dopo aver corretto un buco di dati / bug di fetch).
+    const CACHE_VER = 'v2';
+    // Piccola pausa tra le richieste a chunk in sequenza, per non superare i
+    // limiti di rate di ThingSpeak (che altrimenti scarta/tronca le risposte).
+    function sleep(ms){ return new Promise(res=>setTimeout(res,ms)); }
 
     function el(id){ return document.getElementById(id); }
     // Arrotondamento fisso a 2 cifre decimali per tutti i valori numerici/derivati
@@ -388,7 +394,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     // ─── Live: dati Casa + confronto col Tetto ───
     let ultimoTetto = null;
     function fetchTettoLive(){
-        const url='https://api.thingspeak.com/channels/'+TS_CH_TETTO+'/feeds.json?api_key='+TS_RKEY_TETTO+'&results=5';
+        const url='https://api.thingspeak.com/channels/'+TS_CH_TETTO+'/feeds.json?api_key='+TS_RKEY_TETTO+'&results=5&_v='+CACHE_VER;
         fetch(url).then(r=>r.json()).then(data=>{
             if(data && data.feeds && data.feeds.length) ultimoTetto = median(data.feeds.map(f=>parseFloat(f.field1)));
         }).catch(e=>console.warn('[tetto live]',e));
@@ -410,7 +416,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         // Uso la mediana degli ultimi 5 campioni (non solo l'ultimo) cosi' un
         // singolo dato anomalo (glitch del firmware) non finisce mostrato come
         // valore "attuale".
-        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'results=5';
+        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'results=5&_v='+CACHE_VER;
         fetch(url).then(r=>r.json()).then(data=>{
             if(!data||!data.feeds||!data.feeds.length) return;
             const feeds=data.feeds;
@@ -435,9 +441,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     // sequenza (non tutte insieme) per non farsi scartare dati da ThingSpeak,
     // stessa correzione fatta per il Tetto. ───
     function fetchChunkRaw(start,end,aggMin,retry){
-        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'start='+start.toISOString()+'&end='+end.toISOString()+(aggMin?'&median='+aggMin:'');
+        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'start='+start.toISOString()+'&end='+end.toISOString()+(aggMin?'&median='+aggMin:'')+'&_v='+CACHE_VER;
         return fetch(url).then(r=>r.json()).then(d=>(d&&d.feeds)?d.feeds:[]).catch(e=>{
-            if(!retry) return fetchChunkRaw(start,end,aggMin,true);
+            if(!retry) return sleep(500).then(()=>fetchChunkRaw(start,end,aggMin,true));
             console.warn('[casa chunk fallito]',start,end,e);
             return [];
         });
@@ -452,7 +458,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             cursor=chunkEnd;
         }
         let results=[];
-        return ranges.reduce((p,r)=>p.then(()=>fetchChunkRaw(r[0],r[1],aggMin).then(f=>{results.push(f);})),Promise.resolve())
+        // Richieste in sequenza (non in parallelo) con una piccola pausa tra
+        // un chunk e l'altro: evita che ThingSpeak scarti o tronchi le risposte
+        // per troppe richieste ravvicinate (causa nota dei "buchi" nei grafici).
+        return ranges.reduce((p,r,i)=>p.then(()=>fetchChunkRaw(r[0],r[1],aggMin).then(f=>{
+            results.push(f);
+            return i<ranges.length-1 ? sleep(250) : Promise.resolve();
+        })),Promise.resolve())
             .then(()=>{
                 const merged=[].concat.apply([],results);
                 merged.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
@@ -528,9 +540,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         const ranges=[]; let cursor=new Date(start);
         while(cursor<end){ let ce=new Date(cursor); ce.setDate(ce.getDate()+chunkDays); if(ce>end) ce=new Date(end); ranges.push([new Date(cursor),ce]); cursor=ce; }
         let results=[];
-        return ranges.reduce((p,r)=>p.then(()=>{
-            const url='https://api.thingspeak.com/channels/'+TS_CH_TETTO+'/feeds.json?api_key='+TS_RKEY_TETTO+'&start='+r[0].toISOString()+'&end='+r[1].toISOString()+(aggMin?'&median='+aggMin:'');
-            return fetch(url).then(r2=>r2.json()).then(d=>{ results.push((d&&d.feeds)?d.feeds:[]); }).catch(()=>{ results.push([]); });
+        return ranges.reduce((p,r,i)=>p.then(()=>{
+            const url='https://api.thingspeak.com/channels/'+TS_CH_TETTO+'/feeds.json?api_key='+TS_RKEY_TETTO+'&start='+r[0].toISOString()+'&end='+r[1].toISOString()+(aggMin?'&median='+aggMin:'')+'&_v='+CACHE_VER;
+            return fetch(url).then(r2=>r2.json()).then(d=>{ results.push((d&&d.feeds)?d.feeds:[]); }).catch(()=>{ results.push([]); })
+                .then(()=> i<ranges.length-1 ? sleep(250) : Promise.resolve());
         }),Promise.resolve()).then(()=>{
             const merged=[].concat.apply([],results);
             merged.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
@@ -565,13 +578,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             if(!feeds.length){ el('chartStatus').textContent='Nessun dato'; return; }
             lastCasaFeeds = feeds;
             el('chartStatus').textContent='Aggiornato: '+feeds.length+' campioni';
-            const tempDatasets = [{label:'Temperatura Casa',data:seriesFrom(feeds,FIELD.temp,2.5),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,spanGaps:false}];
-            makeChart('chartH',[{label:'Umidità',data:seriesFrom(feeds,FIELD.hum),borderColor:'#3fb950',borderWidth:2,pointRadius:0,spanGaps:false}],'%');
-            makeChart('chartP',[{label:'Pressione (l.m.)',data:seriesFrom(feeds,FIELD.pSlm,4),borderColor:'#facc15',borderWidth:2,pointRadius:0,spanGaps:false}],'hPa');
+            const tempDatasets = [{label:'Temperatura Casa',data:seriesFrom(feeds,FIELD.temp,2.5),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,spanGaps:true}];
+            makeChart('chartH',[{label:'Umidità',data:seriesFrom(feeds,FIELD.hum),borderColor:'#3fb950',borderWidth:2,pointRadius:0,spanGaps:true}],'%');
+            makeChart('chartP',[{label:'Pressione (l.m.)',data:seriesFrom(feeds,FIELD.pSlm,4),borderColor:'#facc15',borderWidth:2,pointRadius:0,spanGaps:true}],'hPa');
             if(overlayOn){
                 fetchTettoRange(start,end,aggMin,chunkDays).then(tettoFeeds=>{
                     if(tettoFeeds.length){
-                        tempDatasets.push({label:'Temperatura Tetto',data:seriesFrom(tettoFeeds,FIELD.temp,2.5),borderColor:'#f85149',borderWidth:2,pointRadius:0,spanGaps:false,borderDash:[4,3]});
+                        tempDatasets.push({label:'Temperatura Tetto',data:seriesFrom(tettoFeeds,FIELD.temp,2.5),borderColor:'#f85149',borderWidth:2,pointRadius:0,spanGaps:true,borderDash:[4,3]});
                     }
                     makeChart('chartT',tempDatasets,'°C');
                 });
