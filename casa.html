@@ -96,6 +96,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 .overlay-toggle{display:flex;align-items:center;gap:5px;font-size:.62rem;color:var(--sub);cursor:pointer;}
 .overlay-toggle input{cursor:pointer;}
+
+/* Badge di tendenza 1h (stile dashboard Tetto) */
+.trend{font-size:.68rem;font-family:'JetBrains Mono',monospace;margin-top:5px;font-weight:600;color:var(--sub);}
+.trend.up{color:var(--red);}
+.trend.down{color:var(--acc);}
+.trend.flat{color:var(--sub);}
 </style>
 </head>
 <body>
@@ -113,6 +119,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <div class="grid">
         <div class="card" id="cardT">
             <div class="lbl"><span>Temperatura</span><span class="badge" id="badgeTemp">--</span></div>
+            <div class="trend" id="trendTemp">-- (1h)</div>
             <div class="ex-tabs">
                 <button class="ex-tab active" onclick="switchTab(this,'t','mo')">Mese</button>
                 <button class="ex-tab" onclick="switchTab(this,'t','yr')">Anno</button>
@@ -122,6 +129,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         </div>
         <div class="card" id="cardH">
             <div class="lbl"><span>Umidità</span><span class="badge" id="badgeHum">--</span></div>
+            <div class="trend" id="trendHum">-- (1h)</div>
             <div class="ex-tabs">
                 <button class="ex-tab active" onclick="switchTab(this,'h','mo')">Mese</button>
                 <button class="ex-tab" onclick="switchTab(this,'h','yr')">Anno</button>
@@ -133,6 +141,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             <div class="lbl"><span>Pressione</span></div>
             <div class="val" id="P">--</div>
             <div class="unit" id="Pmode">hPa (livello del mare)</div>
+            <div class="trend" id="trendPress">-- (1h)</div>
             <div class="pbtns">
                 <button class="pbtn active" id="pbSlm" onclick="setPressMode('slm')">Livello mare</button>
                 <button class="pbtn" id="pbRaw" onclick="setPressMode('raw')">Raw (stazione)</button>
@@ -213,6 +222,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         <button class="ct-btn" id="btn30d" onclick="setPeriod('30d')">30 giorni</button>
         <button class="ct-btn" id="btnAnno" onclick="setPeriod('anno')">Anno</button>
         <label class="overlay-toggle"><input type="checkbox" id="overlayToggle" onchange="onOverlayToggle()">Sovrapponi Tetto (inerzia termica)</label>
+        <label class="overlay-toggle"><input type="checkbox" id="humidexToggle" onchange="onHumidexToggle()">Mostra Humidex (asse secondario)</label>
         <span style="font-size:.6rem;color:var(--sub);margin-left:4px;" id="chartStatus">Caricamento...</span>
     </div>
     <div class="chart-grid">
@@ -234,7 +244,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     const FIELD = { temp:1, hum:2, pRaw:3, pSlm:5 };
     // Versione cache: incrementarla forza il browser a non riutilizzare risposte
     // HTTP precedenti (es. dopo aver corretto un buco di dati / bug di fetch).
-    const CACHE_VER = 'v2';
+    const CACHE_VER = 'v3';
     // Piccola pausa tra le richieste a chunk in sequenza, per non superare i
     // limiti di rate di ThingSpeak (che altrimenti scarta/tronca le risposte).
     function sleep(ms){ return new Promise(res=>setTimeout(res,ms)); }
@@ -270,6 +280,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         el('Pmode').textContent = mode==='slm' ? 'hPa (livello del mare)' : 'hPa (raw stazione)';
         const v = mode==='slm' ? lastSlm : lastRaw;
         el('P').textContent = fmt(v);
+        fetchTrend();
     }
 
     // ─── Metriche derivate: punto di rugiada, umidità assoluta, humidex, comfort ───
@@ -460,6 +471,36 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     }
 
     function median(arr){ const s=arr.filter(v=>!isNaN(v)).sort((a,b)=>a-b); if(!s.length) return NaN; const m=Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2; }
+
+    // ─── Badge di variazione temporale (tendenza 1h), stile dashboard Tetto ───
+    function computeTrend(feeds, field){
+        if(!feeds || feeds.length<2) return null;
+        const vals = feeds.map(f=>parseFloat(f['field'+field])).filter(v=>!isNaN(v));
+        if(vals.length<2) return null;
+        // Mediana dei primi/ultimi campioni della finestra per ridurre il rumore
+        const firstWin = vals.slice(0, Math.min(3,vals.length));
+        const lastWin = vals.slice(-Math.min(3,vals.length));
+        return median(lastWin) - median(firstWin);
+    }
+    function applyTrendBadge(elId, delta, unit, decimals){
+        const e=el(elId);
+        if(delta===null || isNaN(delta)){ e.textContent='-- (1h)'; e.className='trend flat'; return; }
+        const sign = delta>0?'+':'';
+        e.textContent = sign+delta.toFixed(decimals)+unit+' (1h)';
+        e.className = 'trend '+(delta>0.01?'up':delta<-0.01?'down':'flat');
+    }
+    function fetchTrend(){
+        // Finestra di 65 minuti per confrontare il valore attuale con quello di ~1h fa
+        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'minutes=65&_v='+CACHE_VER;
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(!data||!data.feeds||!data.feeds.length) return;
+            const feeds=data.feeds;
+            const fieldP = pressMode==='slm' ? FIELD.pSlm : FIELD.pRaw;
+            applyTrendBadge('trendTemp', computeTrend(feeds,FIELD.temp), '°C', 2);
+            applyTrendBadge('trendHum', computeTrend(feeds,FIELD.hum), '%', 2);
+            applyTrendBadge('trendPress', computeTrend(feeds,fieldP), ' hPa', 2);
+        }).catch(e=>console.warn('[casa trend]',e));
+    }
     function fetchLive(){
         // Uso la mediana degli ultimi 5 campioni (non solo l'ultimo) cosi' un
         // singolo dato anomalo (glitch del firmware) non finisce mostrato come
@@ -561,6 +602,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     let period='24h';
     let charts={};
     let overlayOn=false;
+    let humidexOn=false;
     let lastCasaFeeds=[];
     function setPeriod(p){
         period=p;
@@ -572,6 +614,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     }
     function onOverlayToggle(){
         overlayOn = el('overlayToggle').checked;
+        loadCharts(period);
+    }
+    function onHumidexToggle(){
+        humidexOn = el('humidexToggle').checked;
         loadCharts(period);
     }
     function rangeParams(p){
@@ -636,42 +682,66 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             if(!feeds.length){ el('chartStatus').textContent='Nessun dato'; return; }
             lastCasaFeeds = feeds;
             el('chartStatus').textContent='Aggiornato: '+feeds.length+' campioni';
+            // Temperatura Casa resta sempre sull'asse principale 'y'. L'Humidex, quando
+            // attivato dal toggle, viene disegnato su un asse secondario 'y1' dedicato
+            // (scala 30-45°C) cosi' non schiaccia la scala della temperatura reale.
             const tempDatasets = [
-                {label:'Temperatura Casa',data:seriesFrom(feeds,FIELD.temp,2.5),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,spanGaps:true},
-                {label:'Humidex (percepita)',data:humidexSeriesFrom(feeds),borderColor:'#e3b341',borderWidth:1.5,pointRadius:0,spanGaps:true,borderDash:[5,3]}
+                {label:'Temperatura Casa',data:seriesFrom(feeds,FIELD.temp,2.5),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,spanGaps:true,yAxisID:'y'}
             ];
+            if(humidexOn){
+                tempDatasets.push({label:'Humidex (percepita)',data:humidexSeriesFrom(feeds),borderColor:'#e3b341',borderWidth:1.5,pointRadius:0,spanGaps:true,borderDash:[5,3],yAxisID:'y1'});
+            }
             makeChart('chartH',[{label:'Umidità',data:seriesFrom(feeds,FIELD.hum),borderColor:'#3fb950',borderWidth:2,pointRadius:0,spanGaps:true}],'%');
             makeChart('chartP',[{label:'Pressione (l.m.)',data:seriesFrom(feeds,FIELD.pSlm,4),borderColor:'#facc15',borderWidth:2,pointRadius:0,spanGaps:true}],'hPa');
+            const tempExtraScales = humidexOn ? {
+                y1:{ position:'right', min:30, max:45, ticks:{color:'#e3b341', font:{size:9}}, grid:{drawOnChartArea:false}, title:{display:true, text:'Humidex °C', color:'#e3b341', font:{size:9}} }
+            } : null;
             if(overlayOn){
                 fetchTettoRange(start,end,aggMin,chunkDays).then(tettoFeeds=>{
                     if(tettoFeeds.length){
-                        tempDatasets.push({label:'Temperatura Tetto',data:seriesFrom(tettoFeeds,FIELD.temp,2.5),borderColor:'#f85149',borderWidth:2,pointRadius:0,spanGaps:true,borderDash:[4,3]});
+                        tempDatasets.push({label:'Temperatura Tetto',data:seriesFrom(tettoFeeds,FIELD.temp,2.5),borderColor:'#f85149',borderWidth:2,pointRadius:0,spanGaps:true,borderDash:[4,3],yAxisID:'y'});
                     }
-                    makeChart('chartT',tempDatasets,'°C');
+                    makeChart('chartT',tempDatasets,'°C',tempExtraScales);
                 });
             } else {
-                makeChart('chartT',tempDatasets,'°C');
+                makeChart('chartT',tempDatasets,'°C',tempExtraScales);
             }
         }).catch(e=>{ el('chartStatus').textContent='Errore caricamento'; console.warn(e); });
     }
-    function makeChart(id,datasets,yLabel){
+    function makeChart(id,datasets,yLabel,extraScales){
         const ctx=el(id); if(!ctx) return;
+        const scales={
+            x:{ type:'time', time:{displayFormats:{hour:'HH:mm',day:'dd/MM'}, tooltipFormat:'dd/MM HH:mm'}, ticks:{color:'#8b949e', font:{size:9}, maxTicksLimit:8}, grid:{color:'#1c2430'} },
+            y:{ position:'left', ticks:{color:'#8b949e', font:{size:9}}, grid:{color:'#1c2430'}, title:{display:true, text:yLabel, color:'#8b949e', font:{size:9}} }
+        };
+        if(extraScales) Object.assign(scales, extraScales);
         const opts={ responsive:true, maintainAspectRatio:false, animation:{duration:300},
             plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:10}, boxWidth:12, padding:8 } },
                 tooltip:{ callbacks:{ label:function(c){ return c.dataset.label+': '+(c.parsed.y===null?'--':c.parsed.y.toFixed(2)); } } } },
-            scales:{
-                x:{ type:'time', time:{displayFormats:{hour:'HH:mm',day:'dd/MM'}, tooltipFormat:'dd/MM HH:mm'}, ticks:{color:'#8b949e', font:{size:9}, maxTicksLimit:8}, grid:{color:'#1c2430'} },
-                y:{ ticks:{color:'#8b949e', font:{size:9}}, grid:{color:'#1c2430'}, title:{display:true, text:yLabel, color:'#8b949e', font:{size:9}} }
-            } };
-        if(charts[id]){ charts[id].data.datasets=datasets; charts[id].update('none'); return; }
+            scales:scales };
+        // Chart.js non permette di cambiare il numero/tipo di scale via update('none')
+        // con lo stesso oggetto grafico: se la configurazione degli assi cambia (es.
+        // toggle Humidex), il grafico viene ricreato da zero per evitare assi "fantasma".
+        if(charts[id]){
+            const currentAxisKeys = Object.keys(charts[id].options.scales||{}).sort().join(',');
+            const newAxisKeys = Object.keys(scales).sort().join(',');
+            if(currentAxisKeys===newAxisKeys){
+                charts[id].data.datasets=datasets;
+                charts[id].options.scales=scales;
+                charts[id].update('none');
+                return;
+            }
+            charts[id].destroy();
+        }
         charts[id]=new Chart(ctx, { type:'line', data:{datasets}, options:opts });
     }
 
-    fetchTettoLive(); fetchLive(); loadCharts('24h');
+    fetchTettoLive(); fetchLive(); fetchTrend(); loadCharts('24h');
     setTimeout(fetchMonth, 3000);
     setTimeout(fetchYear, 6000);
     setInterval(fetchTettoLive, 60000);
     setInterval(fetchLive, 60000);
+    setInterval(fetchTrend, 60000);
     setInterval(()=>{ monthDone=false; fetchMonth(); }, 3600000);
     setInterval(()=>{ yearDone=false; fetchYear(); }, 3600000);
 </script>
