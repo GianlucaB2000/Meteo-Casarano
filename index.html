@@ -525,11 +525,12 @@ body{padding-bottom:64px;}
         if(tsYearDone) return;
         const y=new Date().getFullYear();
         const start=new Date(y,0,1);
-        // Un anno intero di dati grezzi sarebbe troppo pesante da tenere in
-        // cache nel browser, quindi qui si usa una mediana a 10 min. Anche
-        // qui, dal secondo caricamento in poi si scaricano solo i dati
-        // nuovi rispetto all'ultima volta.
-        fetchPeriodCached('year', start, 10, 50).then(feeds=>{
+        // Dati GREZZI come per il mese: il primo caricamento dell'anno sara'
+        // piu' lento (tante richieste in sequenza, una tantum), ma dal
+        // giorno dopo in poi si scaricano solo le letture nuove tramite la
+        // cache, quindi tornera' veloce. Chunk piccoli (4 giorni) per
+        // restare sempre sotto il limite di 8000 record per richiesta.
+        fetchPeriodCached('year', start, null, 4).then(feeds=>{
             if(feeds && feeds.length>0){ fillTsExtremes(despikeWind(feeds),'Yr'); tsYearDone=true; }
         }).catch(e=>console.warn('[TS year]',e));
     }
