@@ -226,7 +226,6 @@ body{padding-bottom:64px;}
             <button class="ct-btn" id="btn7d" onclick="setChartPeriod('7d')">Ultimi 7 giorni</button>
             <button class="ct-btn" id="btn30d" onclick="setChartPeriod('30d')">30 giorni</button>
             <button class="ct-btn" id="btnAnno" onclick="setChartPeriod('anno')">Anno</button>
-            <button class="ct-btn" id="btnDailyAvg" style="display:none" onclick="toggleDailyAvg()">Giornaliero</button>
             <span style="font-size:.6rem;color:var(--sub);margin-left:4px;" id="chartStatus">Caricamento...</span>
         </div>
         <div class="chart-grid">
@@ -439,116 +438,142 @@ body{padding-bottom:64px;}
         }).catch(e=>console.warn('[TS 24h]',e));
     }
 
-    // ─── Cache locale (localStorage) per mese/anno ───
-    // Idea: il primo caricamento scarica tutto il periodo; da quel momento
-    // in poi si scaricano solo i dati arrivati DOPO l'ultimo salvato, che
-    // vengono aggiunti a quelli gia' in cache. La cache viene azzerata da
-    // sola appena inizia un nuovo mese/anno (il confronto e' su periodStart).
-    // Si salvano solo i campi/created_at necessari agli estremi, per restare
-    // leggeri e non rischiare di riempire lo spazio di storage del browser.
-    //
-    // CACHE_VER portata a 'v2': la versione precedente della cache poteva
-    // contenere dati incompleti (scaricati quando il fetch aveva ancora il
-    // bug del limite/rate-limit di ThingSpeak). Cambiando la versione, ogni
-    // browser scarta quella cache vecchia e riparte da un download completo
-    // e corretto, invece di continuare a fidarsi ciecamente di dati
-    // parziali salvati in precedenza.
-    const CACHE_VER = 'v2';
+    // ─── Cache locale per estremi (mese per mese) ───
+    // IMPORTANTE: per gli estremi esatti non serve conservare milioni di letture.
+    // Salviamo solo min/max + timestamp di ogni mese e, per il mese corrente,
+    // l'ultimo timestamp ricevuto. In questo modo il primo recupero storico puo'
+    // essere lento, ma le aperture successive sono quasi immediate.
+    const CACHE_VER = 'v3';
     function cacheKey(period){ return 'meteoTetto_'+period+'_'+CACHE_VER; }
-    function compactFeeds(feeds){
-        return feeds.map(f=>({ created_at:f.created_at, field1:f.field1, field2:f.field2, field3:f.field3, field4:f.field4, field5:f.field5, field7:f.field7 }));
+    function monthKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+    function monthCacheKey(d){ return cacheKey('extmonth_'+monthKey(d)); }
+    function chartMonthCacheKey(d){ return cacheKey('chartmonth_'+monthKey(d)); }
+
+    const EXT_FIELDS = [1,2,3,4,5,7];
+    function emptyExtSummary(){
+        const out={};
+        EXT_FIELDS.forEach(f=>out[f]={mn:null,mnDt:'',mx:null,mxDt:''});
+        return out;
     }
-    function loadCache(period, periodStartISO){
-        try{
-            const raw = localStorage.getItem(cacheKey(period));
-            if(!raw) return null;
-            const obj = JSON.parse(raw);
-            if(!obj || obj.periodStart !== periodStartISO || !obj.feeds || !obj.feeds.length) return null;
-            return obj;
-        }catch(e){ console.warn('[cache] lettura fallita', e); return null; }
-    }
-    function saveCache(period, periodStartISO, feeds){
-        try{
-            const compact = compactFeeds(feeds);
-            const lastTs = compact.length ? compact[compact.length-1].created_at : periodStartISO;
-            localStorage.setItem(cacheKey(period), JSON.stringify({ periodStart: periodStartISO, lastTs: lastTs, feeds: compact }));
-        }catch(e){
-            // Spazio storage esaurito o non disponibile: non e' un problema
-            // grave, semplicemente al prossimo giro si riscarichera' tutto.
-            console.warn('[cache] salvataggio fallito (spazio insufficiente?)', e);
-        }
-    }
-    function mergeFeeds(oldFeeds, newFeeds){
-        const merged = oldFeeds.concat(newFeeds);
-        merged.sort((a,b)=> new Date(a.created_at) - new Date(b.created_at));
-        const seen = {};
-        return merged.filter(f=>{ if(seen[f.created_at]) return false; seen[f.created_at]=true; return true; });
-    }
-    // Recupera un periodo (mese o anno) usando la cache quando possibile:
-    // se in cache c'e' gia' il periodo giusto, scarica solo i dati nuovi
-    // dall'ultimo timestamp salvato; altrimenti scarica tutto da zero.
-    function fetchPeriodCached(period, periodStartDate, aggMinutes, chunkDays){
-        const periodStartISO = periodStartDate.toISOString();
-        const cached = loadCache(period, periodStartISO);
-        const now = new Date();
-        if(cached){
-            const deltaStart = new Date(new Date(cached.lastTs).getTime()+1000);
-            if(deltaStart >= now){
-                // Niente di nuovo da scaricare, uso direttamente la cache.
-                return Promise.resolve(cached.feeds);
-            }
-            return fetchThingSpeakRange(deltaStart, now, aggMinutes, chunkDays).then(newFeeds=>{
-                const merged = mergeFeeds(cached.feeds, newFeeds);
-                saveCache(period, periodStartISO, merged);
-                return merged;
-            }).catch(e=>{
-                console.warn('[cache] fetch incrementale fallito, uso solo la cache esistente', e);
-                return cached.feeds;
+    function summarizeFeeds(feeds, base){
+        const out=JSON.parse(JSON.stringify(base||emptyExtSummary()));
+        (feeds||[]).forEach(f=>{
+            EXT_FIELDS.forEach(field=>{
+                const v=parseFloat(f['field'+field]);
+                if(isNaN(v)) return;
+                const dt=f.created_at||'';
+                if(out[field].mn===null || v<out[field].mn){ out[field].mn=v; out[field].mnDt=dt; }
+                if(out[field].mx===null || v>out[field].mx){ out[field].mx=v; out[field].mxDt=dt; }
             });
-        }
-        return fetchThingSpeakRange(periodStartDate, now, aggMinutes, chunkDays).then(feeds=>{
-            if(feeds && feeds.length>0) saveCache(period, periodStartISO, feeds);
-            return feeds;
         });
+        return out;
+    }
+    function loadExtMonthCache(d){
+        try{
+            const raw=localStorage.getItem(monthCacheKey(d));
+            return raw?JSON.parse(raw):null;
+        }catch(e){ console.warn('[cache] lettura mese fallita',e); return null; }
+    }
+    function saveExtMonthCache(d,obj){
+        try{ localStorage.setItem(monthCacheKey(d),JSON.stringify(obj)); }
+        catch(e){ console.warn('[cache] salvataggio mese fallito',e); }
+    }
+    function isCurrentMonth(d){ const n=new Date(); return d.getFullYear()===n.getFullYear() && d.getMonth()===n.getMonth(); }
+    const monthFetchLocks={};
+
+    function fetchExtMonthCached(monthStart){
+        const key=monthKey(monthStart);
+        if(monthFetchLocks[key]) return monthFetchLocks[key];
+        const now=new Date();
+        const current=isCurrentMonth(monthStart);
+        const monthEnd=current ? now : new Date(monthStart.getFullYear(),monthStart.getMonth()+1,1);
+        const cached=loadExtMonthCache(monthStart);
+
+        if(cached && cached.complete && !current){ return Promise.resolve(cached); }
+
+        let fetchStart=new Date(monthStart);
+        let base=emptyExtSummary();
+        if(cached && cached.summary){
+            base=cached.summary;
+            if(current && cached.lastTs){
+                fetchStart=new Date(new Date(cached.lastTs).getTime()+1000);
+                if(fetchStart>=monthEnd) return Promise.resolve(cached);
+            }
+        }
+
+        monthFetchLocks[key]=fetchThingSpeakRange(fetchStart,monthEnd,null,4).then(function(feeds){
+            feeds=despikeWind(feeds||[]);
+            const summary=summarizeFeeds(feeds,base);
+            const lastTs=feeds.length ? feeds[feeds.length-1].created_at : (cached&&cached.lastTs ? cached.lastTs : (summary[1].mxDt||monthStart.toISOString()));
+            const obj={month:key,complete:!current,lastTs:lastTs,summary:summary};
+            saveExtMonthCache(monthStart,obj);
+            return obj;
+        }).finally(function(){ delete monthFetchLocks[key]; });
+
+        return monthFetchLocks[key];
     }
 
-    let tsMonthDone=false, tsYearDone=false;
+    function combineSummaries(list){
+        let out=emptyExtSummary();
+        list.forEach(obj=>{ if(obj&&obj.summary) out=summarizeFeeds(Object.keys(obj.summary).flatMap(()=>[]),out); });
+        // Somma min/max direttamente, senza riscaricare le letture.
+        list.forEach(obj=>{
+            if(!obj||!obj.summary) return;
+            EXT_FIELDS.forEach(f=>{
+                const r=obj.summary[f];
+                if(!r||r.mn===null) return;
+                if(out[f].mn===null||r.mn<out[f].mn){out[f].mn=r.mn;out[f].mnDt=r.mnDt;}
+                if(out[f].mx===null||r.mx>out[f].mx){out[f].mx=r.mx;out[f].mxDt=r.mxDt;}
+            });
+        });
+        return out;
+    }
+
+    function fillYearExtremesFromSummary(summary,prefix){
+        function f(field,vId,xId,mnTid,mxTid){
+            const r=summary[field];
+            if(!r) return;
+            if(r.mn!==null){ safeSet(vId,'▼ '+Number(r.mn).toFixed(2)); safeSet(mnTid,tsDateToLocal(r.mnDt)); }
+            if(r.mx!==null){ safeSet(xId,'▲ '+Number(r.mx).toFixed(2)); safeSet(mxTid,tsDateToLocal(r.mxDt)); }
+        }
+        f(1,'t'+prefix+'Mn_v','t'+prefix+'Mx_v','t'+prefix+'Mn_t','t'+prefix+'Mx_t');
+        f(2,'h'+prefix+'Mn_v','h'+prefix+'Mx_v','h'+prefix+'Mn_t','h'+prefix+'Mx_t');
+        f(3,'p'+prefix+'Mn_v','p'+prefix+'Mx_v','p'+prefix+'Mn_t','p'+prefix+'Mx_t');
+        f(7,'l'+prefix+'Mn_v','l'+prefix+'Mx_v','l'+prefix+'Mn_t','l'+prefix+'Mx_t');
+        const V=summary[4],G=summary[5];
+        if(V&&V.mn!==null) safeSet('v'+prefix+'Mn_v','▼ '+Number(V.mn).toFixed(2));
+        if(V&&V.mx!==null) safeSet('v'+prefix+'Mx_v','▲ '+Number(V.mx).toFixed(2));
+        if(G&&G.mx!==null) safeSet('g'+prefix+'Mx_v','▲ '+Number(G.mx).toFixed(2));
+    }
+
     function fetchTsMonth(){
-        if(tsMonthDone) return;
-        const now=new Date();
-        const y=now.getFullYear(), mo=now.getMonth()+1;
-        const start=new Date(y, mo-1, 1);
-        // Dati GREZZI (nessuna mediana): un picco breve come 40.8°C durato
-        // pochi minuti veniva "appiattito" dalla mediana a 10 min, che per
-        // costruzione scarta i valori isolati. Chunk da 4 giorni per restare
-        // sotto il limite di 8000 record anche con invii ogni minuto (e se
-        // anche un chunk dovesse superare il limite, fetchThingSpeakChunk lo
-        // divide automaticamente a meta' e riprova).
-        // Grazie alla cache, dal secondo caricamento in poi si scaricano
-        // solo le letture nuove rispetto all'ultima volta.
-        fetchPeriodCached('month', start, null, 4).then(feeds=>{
-            if(feeds && feeds.length>0){ fillTsExtremes(despikeWind(feeds),'Mo'); tsMonthDone=true; }
+        const now=new Date(), start=new Date(now.getFullYear(),now.getMonth(),1);
+        fetchExtMonthCached(start).then(function(obj){
+            if(obj&&obj.summary){ fillYearExtremesFromSummary(obj.summary,'Mo'); }
         }).catch(e=>console.warn('[TS month]',e));
     }
+
+    let yearExtPromise=null;
     function fetchTsYear(){
-        if(tsYearDone) return;
+        if(yearExtPromise) return yearExtPromise;
         const y=new Date().getFullYear();
-        const start=new Date(y,0,1);
-        // Dati GREZZI come per il mese: il primo caricamento dell'anno sara'
-        // piu' lento (tante richieste in sequenza, una tantum, con piccole
-        // pause per non farsi bloccare da ThingSpeak), ma dal giorno dopo in
-        // poi si scaricano solo le letture nuove tramite la cache, quindi
-        // tornera' veloce. Chunk piccoli (4 giorni) per restare sempre sotto
-        // il limite di 8000 record per richiesta, con divisione automatica
-        // a meta' se anche un chunk da 4 giorni dovesse risultare troppo denso.
-        fetchPeriodCached('year', start, null, 4).then(feeds=>{
-            if(feeds && feeds.length>0){ fillTsExtremes(despikeWind(feeds),'Yr'); tsYearDone=true; }
-        }).catch(e=>console.warn('[TS year]',e));
+        const months=[];
+        for(let m=0;m<=new Date().getMonth();m++) months.push(new Date(y,m,1));
+        yearExtPromise=months.reduce(function(p,monthStart){
+            return p.then(function(acc){
+                return fetchExtMonthCached(monthStart).then(function(obj){ acc.push(obj); return acc; });
+            });
+        },Promise.resolve([])).then(function(objs){
+            const summary=combineSummaries(objs);
+            fillYearExtremesFromSummary(summary,'Yr');
+            return objs;
+        }).catch(function(e){ console.warn('[TS year]',e); throw e; }).finally(function(){ yearExtPromise=null; });
+        return yearExtPromise;
     }
-    setTimeout(fetchTsMonth, 4000);
-    setTimeout(fetchTsYear, 8000);
-    setInterval(()=>{ tsMonthDone=false; fetchTsMonth(); }, 3600000);
-    setInterval(()=>{ tsYearDone=false; fetchTsYear(); }, 3600000);
+    setTimeout(fetchTsMonth,4000);
+    setTimeout(fetchTsYear,8000);
+    setInterval(fetchTsMonth,3600000);
+    setInterval(fetchTsYear,3600000);
 
     // ─── Zambretti ───
     function fetchZambrettiTS(){
@@ -994,6 +1019,9 @@ body{padding-bottom:64px;}
                 }
                 console.warn('[TS chunk EMPTY]', start.toISOString(), '->',
                              end.toISOString(), 'dopo 3 retry');
+                // Se il periodo e' davvero vuoto (nessun dato salvato), [] e' corretto.
+                // I retry precedenti hanno gia' escluso un errore transitorio nella maggior
+                // parte dei casi, evitando di perdere silenziosamente un intero intervallo.
                 return [];
             }
 
@@ -1064,91 +1092,78 @@ body{padding-bottom:64px;}
     }
 
     let chartPeriod='24h';
-    let dailyAvgMode=false;
-    let chartLoadSeq=0;
-    let chartLoadBusy=false;
 
-    function aggregateDaily(feeds){ const days={}; feeds.forEach(f=>{ const day=f.created_at.substring(0,10); if(!days[day])days[day]={sum:{},cnt:{},created_at:day+'T12:00:00Z'}; [1,2,3,4,5,7,8].forEach(fld=>{ const v=parseFloat(f['field'+fld]); if(!isNaN(v)){ days[day].sum[fld]=(days[day].sum[fld]||0)+v; days[day].cnt[fld]=(days[day].cnt[fld]||0)+1; } }); }); return Object.keys(days).sort().map(day=>{ const d=days[day]; const feed={created_at:d.created_at}; [1,2,3,4,5,7,8].forEach(fld=>{ feed['field'+fld]=d.cnt[fld]?(d.sum[fld]/d.cnt[fld]):null; }); return feed; }); }
-    function toggleDailyAvg(){ dailyAvgMode=!dailyAvgMode; const b=el('btnDailyAvg'); if(b)b.classList.toggle('active',dailyAvgMode); loadCharts(chartPeriod); }
+    // ─── Grafico Anno con cache mese per mese ───
+    // Il grafico usa una mediana di 12 ore, quindi sono sufficienti poche
+    // decine di punti per mese. I mesi chiusi restano in cache per sempre;
+    // viene aggiornato solo il mese corrente.
+    const AGG_ANNO_MINUTES = 720;
+    function loadChartMonthCache(d){
+        try{ const raw=localStorage.getItem(chartMonthCacheKey(d)); return raw?JSON.parse(raw):null; }
+        catch(e){ console.warn('[chart cache] lettura fallita',e); return null; }
+    }
+    function saveChartMonthCache(d,feeds){
+        try{ localStorage.setItem(chartMonthCacheKey(d),JSON.stringify({month:monthKey(d),feeds:feeds||[]})); }
+        catch(e){ console.warn('[chart cache] salvataggio fallito',e); }
+    }
+    const chartMonthLocks={};
+    function fetchChartMonthCached(monthStart){
+        const key=monthKey(monthStart), current=isCurrentMonth(monthStart);
+        if(chartMonthLocks[key]) return chartMonthLocks[key];
+        const cached=loadChartMonthCache(monthStart);
+        if(cached && !current) return Promise.resolve(cached.feeds||[]);
+        const monthEnd=current?new Date():new Date(monthStart.getFullYear(),monthStart.getMonth()+1,1);
+        chartMonthLocks[key]=fetchThingSpeakRange(new Date(monthStart),monthEnd,AGG_ANNO_MINUTES,30)
+            .then(function(feeds){ saveChartMonthCache(monthStart,feeds||[]); return feeds||[]; })
+            .finally(function(){ delete chartMonthLocks[key]; });
+        return chartMonthLocks[key];
+    }
+    function fetchYearChartCached(){
+        const y=new Date().getFullYear();
+        const months=[];
+        for(let m=0;m<=new Date().getMonth();m++) months.push(new Date(y,m,1));
+        return months.reduce(function(p,monthStart){
+            return p.then(function(acc){ return fetchChartMonthCached(monthStart).then(function(feeds){ return acc.concat(feeds); }); });
+        },Promise.resolve([])).then(function(feeds){
+            feeds.sort(function(a,b){return new Date(a.created_at)-new Date(b.created_at);});
+            const seen={};
+            return feeds.filter(function(f){ if(seen[f.created_at]) return false; seen[f.created_at]=true; return true; });
+        });
+    }
 
-    // Risoluzione dedicata al grafico vento nella vista 24h: resta "fine"
-    // (10 min) come richiesto.
-    const AGG_24H_WIND = 10;
-    // Temperatura/umidita' (e gli altri grafici) nella vista 24h: dati grezzi,
-    // nessuna aggregazione/media.
-    const AGG_24H_MAIN = null;
-    // Grafico annuale: 1 punto ogni 12 ore (confronto giorno/notte), invece
-    // della vecchia media giornaliera ('daily' non e' nemmeno un parametro
-    // valido per l'API ThingSpeak: il parametro 'median' vuole i minuti).
-    const AGG_ANNO_MINUTES = 720; // 12h
+    let chartLoadSeq=0, chartLoadBusy=false;
+    function loadCharts(period,isAuto){
+        if(isAuto && chartLoadBusy) return;
+        const loadId=++chartLoadSeq;
+        chartLoadBusy=true;
+        safeSet('chartStatus','Caricamento...');
+        var end=new Date(), start=new Date(), aggMinutes=null, chunkDays=4;
+        if(period==='24h'){ start.setHours(start.getHours()-24); aggMinutes=null; }
+        else if(period==='7d'){ start.setDate(start.getDate()-7); aggMinutes=10; }
+        else if(period==='30d'){ start.setDate(start.getDate()-30); aggMinutes=60; }
 
-    function loadCharts(period, isAuto) {
-        // Il timer di aggiornamento non deve avviare una seconda richiesta
-        // annuale mentre la prima sta ancora scaricando i chunk. Un click
-        // manuale invece parte sempre e invalida il risultato precedente.
-        if (isAuto && chartLoadBusy) {
-            console.log('[charts] aggiornamento automatico saltato: fetch già in corso');
-            return;
-        }
+        let promise;
+        if(period==='anno') promise=fetchYearChartCached();
+        else if(period==='24h'){
+            promise=Promise.all([
+                fetchThingSpeakRange(start,end,null,chunkDays),
+                fetchThingSpeakRange(start,end,10,chunkDays)
+            ]).then(function(r){ return {main:r[0],wind:r[1]}; });
+        } else promise=fetchThingSpeakRange(start,end,aggMinutes,chunkDays).then(function(f){ return {main:f,wind:null}; });
 
-        var loadId = ++chartLoadSeq;
-        chartLoadBusy = true;
-        safeSet('chartStatus', 'Caricamento...');
-        console.log('[charts] START', period, 'loadId=', loadId);
-
-        var end = new Date();
-        var start = new Date();
-        var aggMinutes = null;
-        var chunkDays = 4;
-        if (period === '24h') { start.setHours(start.getHours() - 24); aggMinutes = AGG_24H_MAIN; }
-        else if (period === '7d') { start.setDate(start.getDate() - 7); aggMinutes = 10; }
-        else if (period === '30d') { start.setDate(start.getDate() - 30); aggMinutes = 60; }
-        else if (period === 'anno') { start.setFullYear(start.getFullYear() - 1); aggMinutes = AGG_ANNO_MINUTES; chunkDays = 30; }
-
-        if (period === '24h') {
-            // Due fetch in parallelo: dati "main" a grana piu' rada per
-            // temperatura/umidita'/pressione/ecc, e dati vento a grana fine.
-            Promise.all([
-                fetchThingSpeakRange(start, end, aggMinutes, chunkDays),
-                fetchThingSpeakRange(start, end, AGG_24H_WIND, chunkDays)
-            ]).then(function(results) {
-                if (loadId !== chartLoadSeq || period !== chartPeriod) {
-                    console.log('[charts] risultato 24h ignorato: richiesta superata', loadId);
-                    return;
-                }
-                var feedsMain = results[0], feedsWind = results[1];
-                if (!feedsMain || feedsMain.length === 0) { safeSet('chartStatus', 'Errore: nessun dato'); return; }
-                buildCharts(feedsMain, period, feedsWind);
-            }).catch(function(e) {
-                if (loadId === chartLoadSeq) {
-                    safeSet('chartStatus', 'Errore caricamento');
-                    console.warn(e);
-                }
-            }).finally(function() {
-                if (loadId === chartLoadSeq) chartLoadBusy = false;
-            });
-            return;
-        }
-
-        fetchThingSpeakRange(start, end, aggMinutes, chunkDays).then(function(feeds) {
-            // Se nel frattempo l'utente ha cambiato periodo, il fetch vecchio
-            // puo' terminare dopo quello nuovo: non deve sovrascrivere il grafico.
-            if (loadId !== chartLoadSeq || period !== chartPeriod) {
-                console.log('[charts] risultato ignorato: richiesta superata', loadId,
-                            'period=', period, 'current=', chartPeriod);
-                return;
-            }
-            if (!feeds || feeds.length === 0) { safeSet('chartStatus', 'Errore: nessun dato'); return; }
-            if (period === '30d' && dailyAvgMode) feeds = aggregateDaily(feeds);
-            buildCharts(feeds, period);
-            console.log('[charts] END', period, 'loadId=', loadId, 'campioni=', feeds.length);
-        }).catch(function(e) {
-            if (loadId === chartLoadSeq) {
-                safeSet('chartStatus', 'Errore caricamento');
-                console.warn(e);
-            }
-        }).finally(function() {
-            if (loadId === chartLoadSeq) chartLoadBusy = false;
+        promise.then(function(res){
+            if(loadId!==chartLoadSeq || period!==chartPeriod) return;
+            var feeds,windFeeds=null;
+            if(period==='24h'){ feeds=res.main; windFeeds=res.wind; }
+            else { feeds=res; }
+            if(!feeds || feeds.length===0){ safeSet('chartStatus','Nessun dato'); return; }
+            buildCharts(feeds,period,windFeeds);
+            safeSet('chartStatus','Aggiornato: '+feeds.length+' campioni');
+        }).catch(function(e){
+            if(loadId===chartLoadSeq) safeSet('chartStatus','Errore caricamento');
+            console.warn('[charts]',e);
+        }).finally(function(){
+            if(loadId===chartLoadSeq) chartLoadBusy=false;
         });
     }
 
@@ -1158,11 +1173,9 @@ body{padding-bottom:64px;}
         el('btn7d').classList.toggle('active',p==='7d');
         el('btn30d').classList.toggle('active',p==='30d');
         el('btnAnno').classList.toggle('active',p==='anno');
-        const dailyBtn=el('btnDailyAvg');
-        if(dailyBtn){ dailyBtn.style.display=(p==='30d')?'inline-block':'none'; }
         loadCharts(p);
     }
-    setInterval(()=>loadCharts(chartPeriod, true), 60000);
+    setInterval(()=>loadCharts(chartPeriod,true),60000);
 
     // ─── LIVE DATA: ultimo feed da ThingSpeak ───
     function fetchLiveData(){
