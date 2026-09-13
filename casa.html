@@ -70,11 +70,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .gauge-item{display:flex;flex-direction:column;align-items:center;}
 .gauge-cap{font-size:.6rem;color:var(--sub);text-transform:uppercase;letter-spacing:.07em;margin-top:2px;}
 .gauge-num{font-size:.95rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--val);margin-top:-4px;}
-.gauge-legend{display:flex;gap:10px;margin-top:2px;}
-.gl-item{display:flex;align-items:center;gap:4px;font-size:.58rem;color:var(--sub);}
-.gl-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
-.gl-dot-real{background:#e6edf3;}
-.gl-dot-perc{background:#e3b341;}
 .gauge-value{font-size:1.05rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--val);margin-top:2px;}
 .gauge-note{font-size:.6rem;color:var(--sub);text-align:center;margin-top:10px;line-height:1.5;}
 .gauge-note.warn{color:var(--red);font-weight:600;}
@@ -115,6 +110,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </div>
 
 <div class="wrap">
+    <div class="sec">Comfort Temperatura / Umidità</div>
+    <div class="card">
+        <div class="gauge-box" id="gaugeBox">
+            <div class="gauge-item">
+                <svg id="gaugeTemp" width="150" height="95" viewBox="0 0 150 95"></svg>
+                <div class="gauge-value" id="gaugeTempValue">-- °C</div>
+                <div class="gauge-cap">Temperatura</div>
+            </div>
+            <div class="gauge-item">
+                <svg id="gaugeHum" width="150" height="95" viewBox="0 0 150 95"></svg>
+                <div class="gauge-value" id="gaugeHumValue">-- %</div>
+                <div class="gauge-cap">Umidità</div>
+            </div>
+        </div>
+        <div class="gauge-combined">
+            <span class="combo-badge" id="comboBadge">--</span>
+        </div>
+        <div class="gauge-note" id="gaugeHumidexNote"></div>
+    </div>
+
     <div class="sec">Ultimo rilievo</div>
     <div class="grid">
         <div class="card" id="cardT">
@@ -173,30 +188,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         </div>
     </div>
 
-    <div class="sec">Comfort Temperatura / Umidità</div>
-    <div class="card">
-        <div class="gauge-box" id="gaugeBox">
-            <div class="gauge-item">
-                <svg id="gaugeTemp" width="150" height="95" viewBox="0 0 150 95"></svg>
-                <div class="gauge-value" id="gaugeTempValue">-- °C</div>
-                <div class="gauge-legend">
-                    <span class="gl-item"><span class="gl-dot gl-dot-real"></span>Reale</span>
-                    <span class="gl-item"><span class="gl-dot gl-dot-perc"></span>Percepita</span>
-                </div>
-                <div class="gauge-cap">Temp. Reale vs Percepita</div>
-            </div>
-            <div class="gauge-item">
-                <svg id="gaugeHum" width="150" height="95" viewBox="0 0 150 95"></svg>
-                <div class="gauge-value" id="gaugeHumValue">-- %</div>
-                <div class="gauge-cap">Umidità</div>
-            </div>
-        </div>
-        <div class="gauge-combined">
-            <span class="combo-badge" id="comboBadge">--</span>
-        </div>
-        <div class="gauge-note" id="gaugeHumidexNote"></div>
-    </div>
-
     <div class="sec">Confronto con il Tetto (esterno)</div>
     <div class="grid">
         <div class="card hero">
@@ -222,13 +213,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         <button class="ct-btn" id="btn30d" onclick="setPeriod('30d')">30 giorni</button>
         <button class="ct-btn" id="btnAnno" onclick="setPeriod('anno')">Anno</button>
         <label class="overlay-toggle"><input type="checkbox" id="overlayToggle" onchange="onOverlayToggle()">Sovrapponi Tetto (inerzia termica)</label>
-        <label class="overlay-toggle"><input type="checkbox" id="humidexToggle" onchange="onHumidexToggle()">Mostra Humidex (asse secondario)</label>
         <span style="font-size:.6rem;color:var(--sub);margin-left:4px;" id="chartStatus">Caricamento...</span>
     </div>
     <div class="chart-grid">
         <div class="chart-box"><div class="chart-title">🌡 Temperatura (°C)</div><div class="chart-wrap"><canvas id="chartT"></canvas></div></div>
+        <div class="chart-box"><div class="chart-title">🥵 Temperatura Percepita — Humidex (°C)</div><div class="chart-wrap"><canvas id="chartHx"></canvas></div></div>
         <div class="chart-box"><div class="chart-title">💧 Umidità (%)</div><div class="chart-wrap"><canvas id="chartH"></canvas></div></div>
-        <div class="chart-box"><div class="chart-title">🔵 Pressione (hPa)</div><div class="chart-wrap"><canvas id="chartP"></canvas></div></div>
     </div>
 </div>
 
@@ -237,6 +227,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <div class="pagenav-label">🏠 Casa</div>
     <a class="pagenav-btn" href="orto.html">›</a>
 </div>
+
 
 <script>
     const TS_CH_CASA = 3211426, TS_RKEY_CASA = '';
@@ -386,7 +377,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     // (puntata verso l'alto, corrispondente a 90°): rotate = angolo - 90.
     function angleToRotate(angleDeg){ return angleDeg-90; }
 
-    function buildGaugeSkeleton(min,max,zones,hasSecondNeedle){
+    function buildGaugeSkeleton(min,max,zones){
         const cx=GAUGE_CX, cy=GAUGE_CY, r=GAUGE_R;
         let svg='';
         // Fascia di sfondo neutra dietro le zone, per dare continuità al quadrante
@@ -398,11 +389,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         // tacche min/max
         svg += '<text x="'+(cx-r-2)+'" y="'+(cy+16)+'" font-size="9" fill="#8b949e">'+min+'</text>';
         svg += '<text x="'+(cx+r-10)+'" y="'+(cy+16)+'" font-size="9" fill="#8b949e">'+max+'</text>';
-        // seconda lancetta (es. Humidex/percepita), disegnata sotto la principale, verticale di default
-        if(hasSecondNeedle){
-            svg += '<g class="needle-second" id="__NEEDLE2__"><line x1="'+cx+'" y1="'+cy+'" x2="'+cx+'" y2="'+(cy-(r-24))+'" stroke="#e3b341" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="3,2"/></g>';
-        }
-        // lancetta principale (valore reale), verticale di default, ruotata via transform
+        // lancetta, verticale di default, ruotata via transform
         svg += '<g class="needle-main" id="__NEEDLE1__"><line x1="'+cx+'" y1="'+cy+'" x2="'+cx+'" y2="'+(cy-(r-18))+'" stroke="#e6edf3" stroke-width="2.5" stroke-linecap="round"/></g>';
         svg += '<circle cx="'+cx+'" cy="'+cy+'" r="4.5" fill="#e6edf3"/>';
         return svg;
@@ -419,10 +406,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             {from:35,to:60,color:'#3fb950'},
             {from:60,to:100,color:'#f85149'}
         ];
-        let tSvg = buildGaugeSkeleton(-10,40,tempZones,true);
-        tSvg = tSvg.replace('__NEEDLE1__','needleTempMain').replace('__NEEDLE2__','needleTempSecond');
+        let tSvg = buildGaugeSkeleton(-10,40,tempZones);
+        tSvg = tSvg.replace('__NEEDLE1__','needleTempMain');
         el('gaugeTemp').innerHTML = tSvg;
-        let hSvg = buildGaugeSkeleton(0,100,humZones,false);
+        let hSvg = buildGaugeSkeleton(0,100,humZones);
         hSvg = hSvg.replace('__NEEDLE1__','needleHumMain');
         el('gaugeHum').innerHTML = hSvg;
         gaugesInit=true;
@@ -434,7 +421,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     function drawGauges(t,rh,hx){
         if(!gaugesInit) initGauges();
         if(!isNaN(t)) setNeedle('needleTempMain', angleToRotate(valToAngle(t,-10,40)));
-        if(!isNaN(hx)) setNeedle('needleTempSecond', angleToRotate(valToAngle(hx,-10,40)));
         if(!isNaN(rh)) setNeedle('needleHumMain', angleToRotate(valToAngle(rh,0,100)));
         // Valori numerici correnti mostrati SOLO sotto i rispettivi quadranti
         el('gaugeTempValue').textContent = fmt(t)+' °C';
@@ -602,7 +588,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     let period='24h';
     let charts={};
     let overlayOn=false;
-    let humidexOn=false;
     let lastCasaFeeds=[];
     function setPeriod(p){
         period=p;
@@ -614,10 +599,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     }
     function onOverlayToggle(){
         overlayOn = el('overlayToggle').checked;
-        loadCharts(period);
-    }
-    function onHumidexToggle(){
-        humidexOn = el('humidexToggle').checked;
         loadCharts(period);
     }
     function rangeParams(p){
@@ -682,29 +663,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             if(!feeds.length){ el('chartStatus').textContent='Nessun dato'; return; }
             lastCasaFeeds = feeds;
             el('chartStatus').textContent='Aggiornato: '+feeds.length+' campioni';
-            // Temperatura Casa resta sempre sull'asse principale 'y'. L'Humidex, quando
-            // attivato dal toggle, viene disegnato su un asse secondario 'y1' dedicato
-            // (scala 30-45°C) cosi' non schiaccia la scala della temperatura reale.
             const tempDatasets = [
                 {label:'Temperatura Casa',data:seriesFrom(feeds,FIELD.temp,2.5),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,spanGaps:true,yAxisID:'y'}
             ];
-            if(humidexOn){
-                tempDatasets.push({label:'Humidex (percepita)',data:humidexSeriesFrom(feeds),borderColor:'#e3b341',borderWidth:1.5,pointRadius:0,spanGaps:true,borderDash:[5,3],yAxisID:'y1'});
-            }
             makeChart('chartH',[{label:'Umidità',data:seriesFrom(feeds,FIELD.hum),borderColor:'#3fb950',borderWidth:2,pointRadius:0,spanGaps:true}],'%');
-            makeChart('chartP',[{label:'Pressione (l.m.)',data:seriesFrom(feeds,FIELD.pSlm,4),borderColor:'#facc15',borderWidth:2,pointRadius:0,spanGaps:true}],'hPa');
-            const tempExtraScales = humidexOn ? {
-                y1:{ position:'right', min:30, max:45, ticks:{color:'#e3b341', font:{size:9}}, grid:{drawOnChartArea:false}, title:{display:true, text:'Humidex °C', color:'#e3b341', font:{size:9}} }
-            } : null;
+            makeChart('chartHx',[{label:'Humidex (percepita)',data:humidexSeriesFrom(feeds),borderColor:'#e3b341',borderWidth:2,pointRadius:0,spanGaps:true}],'°C');
             if(overlayOn){
                 fetchTettoRange(start,end,aggMin,chunkDays).then(tettoFeeds=>{
                     if(tettoFeeds.length){
                         tempDatasets.push({label:'Temperatura Tetto',data:seriesFrom(tettoFeeds,FIELD.temp,2.5),borderColor:'#f85149',borderWidth:2,pointRadius:0,spanGaps:true,borderDash:[4,3],yAxisID:'y'});
                     }
-                    makeChart('chartT',tempDatasets,'°C',tempExtraScales);
+                    makeChart('chartT',tempDatasets,'°C');
                 });
             } else {
-                makeChart('chartT',tempDatasets,'°C',tempExtraScales);
+                makeChart('chartT',tempDatasets,'°C');
             }
         }).catch(e=>{ el('chartStatus').textContent='Errore caricamento'; console.warn(e); });
     }
@@ -719,9 +691,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:10}, boxWidth:12, padding:8 } },
                 tooltip:{ callbacks:{ label:function(c){ return c.dataset.label+': '+(c.parsed.y===null?'--':c.parsed.y.toFixed(2)); } } } },
             scales:scales };
-        // Chart.js non permette di cambiare il numero/tipo di scale via update('none')
-        // con lo stesso oggetto grafico: se la configurazione degli assi cambia (es.
-        // toggle Humidex), il grafico viene ricreato da zero per evitare assi "fantasma".
         if(charts[id]){
             const currentAxisKeys = Object.keys(charts[id].options.scales||{}).sort().join(',');
             const newAxisKeys = Object.keys(scales).sort().join(',');
