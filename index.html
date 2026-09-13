@@ -875,7 +875,7 @@ body{padding-bottom:64px;}
 
     // ─── Grafici con Chart.js ───
     let charts={};
-    function buildCharts(feeds, period, windFeeds) {
+    function buildCharts(feeds, period) {
         if (!feeds || feeds.length === 0) { safeSet('chartStatus', 'Nessun dato'); return; }
         function toTimeSeriesFrom(arr, field) {
             return arr.map(function(f) {
@@ -924,9 +924,11 @@ body{padding-bottom:64px;}
         var hData = toTimeSeries(2);
         var pDataRaw = toTimeSeries(3);
         var pData = despike(pDataRaw.map(function(p){ if(p.y===null||p.y<940||p.y>1050) return {x:p.x,y:null}; return p; }), 4);
-        // Il vento usa sempre la risoluzione fine (windFeeds, valorizzato solo
-        // nella vista 24h); se windFeeds non e' passato si ricade su 'feeds'.
-        var windSrc = despikeWind(windFeeds || feeds);
+        // Il vento ora usa la stessa risoluzione/aggregazione del resto dei
+        // grafici (la stessa 'feeds' gia' scaricata per Temperatura/Umidita'/
+        // Pressione), invece di una fetch separata a mediana fissa di 10 minuti:
+        // il filtro despikeWind() sui glitch del sensore e' sufficiente da solo.
+        var windSrc = despikeWind(feeds);
         var vData = toTimeSeriesFrom(windSrc, 4);
         var gData = toTimeSeriesFrom(windSrc, 5);
         var lData = toTimeSeries(7).map(function(p){ return { x: p.x, y: (p.y===null)?null:Math.max(p.y,0.01) }; });
@@ -1194,22 +1196,17 @@ body{padding-bottom:64px;}
         else if(period==='7d'){ start.setDate(start.getDate()-7); aggMinutes=10; }
         else if(period==='30d'){ start.setDate(start.getDate()-30); aggMinutes=60; }
 
+        // Il vento ora segue sempre la stessa risoluzione/aggregazione degli
+        // altri grafici: non serve piu' una seconda fetch dedicata a mediana
+        // fissa di 10 minuti (il filtro despikeWind() basta a togliere i glitch).
         let promise;
         if(period==='anno') promise=fetchYearChartCached();
-        else if(period==='24h'){
-            promise=Promise.all([
-                fetchThingSpeakRange(start,end,1,chunkDays),
-                fetchThingSpeakRange(start,end,10,chunkDays)
-            ]).then(function(r){ return {main:r[0],wind:r[1]}; });
-        } else promise=fetchThingSpeakRange(start,end,aggMinutes,chunkDays).then(function(f){ return {main:f,wind:null}; });
+        else promise=fetchThingSpeakRange(start,end,aggMinutes,chunkDays);
 
-        promise.then(function(res){
+        promise.then(function(feeds){
             if(loadId!==chartLoadSeq || period!==chartPeriod) return;
-            var feeds,windFeeds=null;
-            if(period==='24h'){ feeds=res.main; windFeeds=res.wind; }
-            else { feeds=res; }
             if(!feeds || feeds.length===0){ safeSet('chartStatus','Nessun dato'); return; }
-            buildCharts(feeds,period,windFeeds);
+            buildCharts(feeds,period);
             if(period==='anno' && feeds.length){
                 const first=new Date(feeds[0].created_at);
                 const last=new Date(feeds[feeds.length-1].created_at);
