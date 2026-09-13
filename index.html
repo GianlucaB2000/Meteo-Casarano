@@ -230,11 +230,11 @@ body{padding-bottom:64px;}
         </div>
         <div class="chart-grid">
             <div class="chart-box"><div class="chart-title">🌡 Temperatura (°C)</div><div class="chart-wrap"><canvas id="chartT"></canvas></div></div>
+            <div class="chart-box"><div class="chart-title">🥵 Temperatura Percepita (°C)</div><div class="chart-wrap"><canvas id="chartHx"></canvas></div></div>
             <div class="chart-box"><div class="chart-title">💧 Umidita (%)</div><div class="chart-wrap"><canvas id="chartH"></canvas></div></div>
             <div class="chart-box"><div class="chart-title">💨 Pressione s.l.m. (hPa)</div><div class="chart-wrap"><canvas id="chartP"></canvas></div></div>
             <div class="chart-box"><div class="chart-title">🌬 Vento — Media / Raffica (km/h)</div><div class="chart-wrap"><canvas id="chartV"></canvas></div></div>
-            <div class="chart-box"><div class="chart-title">🌧 Intensita pioggia (mm/h)</div><div class="chart-wrap"><canvas id="chartRR"></canvas></div></div>
-            <div class="chart-box" id="chartBoxR"><div class="chart-title">🌧 Accumulo giornaliero (mm)</div><div class="chart-wrap"><canvas id="chartR"></canvas></div></div>
+            <div class="chart-box"><div class="chart-title">🌧 Pioggia — Intensità (mm/h) e Accumulo (mm)</div><div class="chart-wrap"><canvas id="chartRain"></canvas></div></div>
             <div class="chart-box"><div class="chart-title">☀ Radiazione (lux)</div><div class="chart-wrap"><canvas id="chartL"></canvas></div></div>
         </div>
     </div>
@@ -931,27 +931,32 @@ body{padding-bottom:64px;}
         var windSrc = despikeWind(feeds);
         var vData = toTimeSeriesFrom(windSrc, 4);
         var gData = toTimeSeriesFrom(windSrc, 5);
+        // Temperatura Percepita: stessa formula (feelsLike, con heat index sopra
+        // i 27°C e wind chill sotto i 10°C) gia' usata per il valore live "Percepita",
+        // calcolata qui punto per punto da temperatura, umidita' e vento dello
+        // stesso campione, cosi' il grafico e' coerente con la card in alto.
+        var flData = feeds.map(function(f,i){
+            var t = tData[i] ? tData[i].y : null;
+            var hRaw = parseFloat(f.field2);
+            var vRaw = windSrc[i] ? parseFloat(windSrc[i].field4) : NaN;
+            var x = new Date(f.created_at).getTime();
+            if (t===null || isNaN(t) || isNaN(hRaw)) return { x: x, y: null };
+            var v = isNaN(vRaw) ? 0 : vRaw;
+            var fl = feelsLike(t, hRaw, v);
+            return { x: x, y: (fl===null||isNaN(fl)) ? null : fl };
+        });
         var lData = toTimeSeries(7).map(function(p){ return { x: p.x, y: (p.y===null)?null:Math.max(p.y,0.01) }; });
         // La pioggia accumulata non puo' mai essere negativa (e' un contatore che
         // sale durante il giorno e si azzera a mezzanotte): eventuali valori
         // negativi spuri vengono riportati a 0 invece di essere disegnati com'e'.
         var rData = toTimeSeries(8).map(function(p){ return { x: p.x, y: (p.y===null)?null:Math.max(p.y,0) }; });
         makeChart('chartT', 'line', [makeDataset(tData, '#58a6ff', 'Temperatura')], null, baseOpts('°C'));
+        makeChart('chartHx', 'line', [makeDataset(flData, '#e3b341', 'Percepita')], null, baseOpts('°C'));
         makeChart('chartH', 'line', [makeDataset(hData, '#3fb950', 'Umidità')], null, baseOpts('%'));
         makeChart('chartP', 'line', [makeDataset(pData, '#c084fc', 'Pressione slm')], null, baseOpts('hPa'));
         makeChart('chartV', 'line', [makeDataset(vData, '#3fb950', 'Media'), makeDataset(gData, '#e3b341', 'Raffica')], null, baseOpts('km/h'));
         var lOpts = baseOpts('lux (log)'); lOpts.scales.y.type='logarithmic'; lOpts.scales.y.min=0.01;
         makeChart('chartL', 'line', [makeDataset(lData, '#f59e0b', 'Luce')], null, lOpts);
-        // Asse Y del grafico pioggia bloccato a un minimo di 0: un accumulo di
-        // pioggia non puo' mai scendere sotto zero, nemmeno visivamente quando
-        // il contatore si azzera a mezzanotte.
-        var rOpts = baseOpts('mm'); rOpts.scales.y.min = 0;
-        makeChart('chartR', 'line', [makeDataset(rData, '#60a5fa', 'Accumulo mm')], null, rOpts);
-        // Se non c'e' stata pioggia nel periodo mostrato, il grafico accumulo
-        // viene nascosto per non occupare spazio in verticale inutilmente.
-        var rMaxVal = rData.reduce(function(m,p){ return (p.y!==null && p.y>m) ? p.y : m; }, 0);
-        var chartBoxR = document.getElementById('chartBoxR');
-        if (chartBoxR) chartBoxR.style.display = (rMaxVal > 0) ? '' : 'none';
         var rrData = [];
         for (var i = 1; i < rData.length; i++) {
             var prev = rData[i - 1];
@@ -962,7 +967,18 @@ body{padding-bottom:64px;}
             var dt = (curr.x - prev.x) / 3600000;
             rrData.push({ x: curr.x, y: dt > 0 ? diff / dt : 0 });
         }
-        makeChart('chartRR', 'bar', [{ label: 'Intensità mm/h', data: rrData, backgroundColor: 'rgba(96,165,250,0.5)', borderColor: '#60a5fa', borderWidth: 1 }], null, baseOpts('mm/h'));
+        // Pioggia: un unico grafico con doppio asse Y invece dei due box
+        // separati di prima. Barre = intensita' (mm/h, asse sinistro), linea =
+        // accumulo cumulativo (mm, asse destro), sullo stesso asse temporale -
+        // cosi' i due dati restano sempre visibili e correlabili, senza il box
+        // dell'accumulo che compariva/spariva a seconda che piovesse o meno.
+        var rainOpts = baseOpts('mm/h');
+        rainOpts.scales.y.min = 0;
+        rainOpts.scales.y1 = { position: 'right', min: 0, ticks: { color: '#8b949e', font: { size: 9 } }, grid: { drawOnChartArea: false }, border: { color: '#30363d' }, title: { display: true, text: 'mm (accumulo)', color: '#8b949e', font: { size: 9 } } };
+        makeChart('chartRain', 'bar', [
+            { type: 'bar', label: 'Intensità mm/h', data: rrData, backgroundColor: 'rgba(96,165,250,0.5)', borderColor: '#60a5fa', borderWidth: 1, yAxisID: 'y' },
+            { type: 'line', label: 'Accumulo mm', data: rData, borderColor: '#e3b341', backgroundColor: 'transparent', borderWidth: 2, spanGaps: true, pointRadius: 0, pointHoverRadius: 8, pointHitRadius: 12, fill: false, yAxisID: 'y1' }
+        ], null, rainOpts);
         safeSet('chartStatus', 'Aggiornato: ' + feeds.length + ' campioni');
     }
 
