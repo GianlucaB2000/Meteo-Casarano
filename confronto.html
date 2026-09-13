@@ -30,6 +30,12 @@ body{padding-bottom:64px;}
 .chart-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin-bottom:8px;padding-left:8px;}
 .chart-wrap{position:relative;height:280px;}
 .status{font-size:.7rem;color:var(--sub);margin:10px 2px;}
+
+/* Selettore dati grezzi / medie */
+.mode-toolbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 2px 12px;}
+.mode-lbl{font-size:.6rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sub);margin-right:2px;}
+.mode-btn{background:var(--bg3);border:1px solid var(--brd);color:var(--sub);font-size:.68rem;padding:6px 12px;border-radius:8px;cursor:pointer;}
+.mode-btn.active{color:var(--acc);border-color:var(--acc);}
 </style>
 </head>
 <body>
@@ -40,7 +46,7 @@ body{padding-bottom:64px;}
 </div>
 
 <div class="wrap">
-    <div class="status" id="status">Caricamento dati (ultime 48h)...</div>
+    <div class="status" id="status">Caricamento dati (ultime 24h)...</div>
 
     <div class="sec">Delta termico attuale (media ultimi 10 min)</div>
     <div class="grid" style="margin-bottom:6px">
@@ -60,12 +66,21 @@ body{padding-bottom:64px;}
     </div>
     <div class="note" style="margin:8px 2px 0;line-height:1.5">
         Ogni valore qui sopra è la <b>media di tutti i delta calcolati nella finestra oraria indicata</b>,
-        su tutto il periodo di 48h analizzato — non un singolo istante.
-        <b>Complessivo</b> = media su tutte le 48h. <b>Diurno</b> = media dei soli punti tra le 06:00 e le 20:00
-        (tutti i giorni nel periodo). <b>Notturno</b> = media dei punti fuori da quella fascia (20:00-06:00).
+        su tutto il periodo di 24h analizzato — non un singolo istante.
+        <b>Complessivo</b> = media su tutte le 24h. <b>Diurno</b> = media dei soli punti tra le 06:00 e le 20:00.
+        <b>Notturno</b> = media dei punti fuori da quella fascia (20:00-06:00).
         <b>Picco sole 13-16</b> = media ristretta alle ore centrali del pomeriggio, quando l'irraggiamento
         diretto sul tetto è massimo: è la metrica più indicativa di quanto il tetto scaldi di più rispetto
-        all'orto per effetto del sole.
+        all'orto per effetto del sole. Queste quattro metriche usano sempre la media mobile 10 min,
+        indipendentemente dalla vista scelta qui sotto per i grafici.
+    </div>
+
+    <div class="sec">Grafici</div>
+    <div class="mode-toolbar">
+        <span class="mode-lbl">Visualizzazione dati:</span>
+        <button class="mode-btn" id="btnRaw" onclick="setMode('raw')">Dati grezzi</button>
+        <button class="mode-btn active" id="btn10min" onclick="setMode('10min')">Media 10 min</button>
+        <button class="mode-btn" id="btn30min" onclick="setMode('30min')">Media 30 min</button>
     </div>
 
     <div class="chart-box">
@@ -86,8 +101,8 @@ body{padding-bottom:64px;}
 
 <script>
     // Porting della logica dello script Python (tetto_vs_orto): stessa
-    // finestra (2 giorni), stessa media mobile 10 min e stesse fasce orarie
-    // per il calcolo del delta.
+    // finestra (24 ore), stesse fasce orarie per il calcolo del delta, e lo
+    // stesso selettore Dati grezzi / Media 10 min / Media 30 min per i grafici.
     const TS_TETTO = 3217870, TS_TETTO_KEY = 'E1WOMQU43G4GNNXI';
     const TS_ORTO  = 3358319, TS_ORTO_KEY  = '';
     // Mappatura campi Orto confermata (canale 3358319): field1 = Temp Aria (SHT40).
@@ -98,13 +113,17 @@ body{padding-bottom:64px;}
     function colorFor(v){ if(v===null||v===undefined||isNaN(v)) return '#94a3b8'; return v>0.05?'#fb923c':(v<-0.05?'#4ade80':'#94a3b8'); }
 
     function fetchFeeds(ch,key){
-        const url='https://api.thingspeak.com/channels/'+ch+'/feeds.json?'+(key?'api_key='+key+'&':'')+'days=2';
+        // Ultime 24 ore (era days=2 / 48h)
+        const url='https://api.thingspeak.com/channels/'+ch+'/feeds.json?'+(key?'api_key='+key+'&':'')+'days=1';
         return fetch(url).then(r=>r.json()).then(d=>(d&&d.feeds)?d.feeds:[]);
     }
 
-    // Media mobile a finestra temporale (10 min) su una serie {t: ms, v: number|null}
-    function rollingMean10min(series){
-        const WIN = 10*60*1000;
+    // Media mobile a finestra temporale (minuti configurabili) su una serie
+    // {t: ms, v: number|null}. Con minutes=null restituisce la serie invariata
+    // (modalità "dati grezzi").
+    function rollingMeanWindow(series, minutes){
+        if(!minutes) return series;
+        const WIN = minutes*60*1000;
         const out = [];
         let start = 0;
         let sum = 0, cnt = 0;
@@ -135,6 +154,9 @@ body{padding-bottom:64px;}
         return out;
     }
 
+    let chartTemp=null, chartDelta=null;
+    let modesData=null;
+
     Promise.all([ fetchFeeds(TS_TETTO,TS_TETTO_KEY), fetchFeeds(TS_ORTO,TS_ORTO_KEY) ]).then(([feedsT,feedsO])=>{
         if(!feedsT.length || !feedsO.length){ el('status').textContent='Dati mancanti da una delle due stazioni'; return; }
 
@@ -143,8 +165,8 @@ body{padding-bottom:64px;}
 
         // Scarta gli outlier confrontando ogni punto con la MEDIANA di una
         // finestra di punti vicini (non solo il vicino immediato): un glitch
-        // che dura 2-3 campioni di fila (come quello di oggi) sfuggiva al
-        // controllo precedente, che guardava solo un punto alla volta.
+        // che dura 2-3 campioni di fila sfuggiva al controllo precedente,
+        // che guardava solo un punto alla volta.
         function despike(series, maxJump, half){
             half = half || 4;
             const values = series.map(p=>p.v);
@@ -162,13 +184,23 @@ body{padding-bottom:64px;}
         despike(sT, 1.2);
         despike(sO, 1.2);
 
-        const smT = rollingMean10min(sT);
-        const smO = rollingMean10min(sO);
-        const aligned = alignByTimestamp(smT, smO).filter(p=>p.tetto!==null && p.orto!==null);
+        // Costruisce, per una data finestra di media (null = dati grezzi), la
+        // serie allineata Tetto/Orto con il delta calcolato punto per punto.
+        function buildAligned(minutes){
+            const smT = rollingMeanWindow(sT, minutes);
+            const smO = rollingMeanWindow(sO, minutes);
+            return alignByTimestamp(smT, smO)
+                .filter(p=>p.tetto!==null && p.orto!==null)
+                .map(p=>({ t:p.t, tetto:p.tetto, orto:p.orto, delta:p.tetto-p.orto }));
+        }
 
-        if(!aligned.length){ el('status').textContent='Nessun punto allineato tra le due stazioni'; return; }
+        modesData = { raw: buildAligned(null), '10min': buildAligned(10), '30min': buildAligned(30) };
 
-        const withDelta = aligned.map(p=>({ t:p.t, tetto:p.tetto, orto:p.orto, delta:p.tetto-p.orto }));
+        if(!modesData['10min'].length){ el('status').textContent='Nessun punto allineato tra le due stazioni'; return; }
+
+        // Le 4 metriche riassuntive e il "delta adesso" usano sempre la media
+        // mobile 10 min, indipendentemente dalla vista grafici selezionata.
+        const withDelta = modesData['10min'];
 
         function mean(arr){ return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null; }
         const rome = t => { const d=new Date(t); return d.getHours()+d.getMinutes()/60; };
@@ -179,8 +211,8 @@ body{padding-bottom:64px;}
         const dPicco  = mean(withDelta.filter(p=>{ const o=rome(p.t); return o>=13&&o<16; }).map(p=>p.delta));
 
         // Delta "attuale": l'ultimo punto della serie e' gia' la media mobile
-        // degli ultimi 10 minuti (rollingMean10min), quindi rappresenta esattamente
-        // "il delta adesso, calcolato sui valori mediati degli ultimi 10 minuti".
+        // degli ultimi 10 minuti, quindi rappresenta esattamente "il delta
+        // adesso, calcolato sui valori mediati degli ultimi 10 minuti".
         const last = withDelta[withDelta.length-1];
         const minutesAgo = Math.round((Date.now()-last.t)/60000);
         el('dNow').textContent = fmt(last.delta);
@@ -195,7 +227,14 @@ body{padding-bottom:64px;}
         el('dGiorno').textContent=fmt(dGiorno); el('dGiorno').style.color=colorFor(dGiorno);
         el('dNotte').textContent=fmt(dNotte); el('dNotte').style.color=colorFor(dNotte);
         el('dPicco').textContent=fmt(dPicco); el('dPicco').style.color=colorFor(dPicco);
-        el('status').textContent='Periodo: ultime 48h · '+withDelta.length+' punti allineati · media mobile 10 min';
+        el('status').textContent='Periodo: ultime 24h · '+withDelta.length+' punti allineati (media 10 min)';
+
+        makeCharts('10min');
+    }).catch(e=>{ console.warn(e); el('status').textContent='Errore nel caricamento dei dati'; });
+
+    function makeCharts(mode){
+        if(!modesData) return;
+        const rows = modesData[mode];
 
         const isMobile = window.innerWidth < 600;
         const baseOpts = {
@@ -209,22 +248,31 @@ body{padding-bottom:64px;}
             }
         };
 
-        new Chart(el('cTemp'), { type:'line', data:{ datasets:[
-            { label:'Tetto', data: withDelta.map(p=>({x:p.t,y:p.tetto})), borderColor:'#38bdf8', borderWidth:2.4, pointRadius:0, tension:0.15 },
-            { label:'Orto',  data: withDelta.map(p=>({x:p.t,y:p.orto})),  borderColor:'#f87171', borderWidth:2.4, pointRadius:0, tension:0.15 }
+        if(chartTemp) chartTemp.destroy();
+        if(chartDelta) chartDelta.destroy();
+
+        chartTemp = new Chart(el('cTemp'), { type:'line', data:{ datasets:[
+            { label:'Tetto', data: rows.map(p=>({x:p.t,y:p.tetto})), borderColor:'#38bdf8', borderWidth:2.4, pointRadius:0, tension:0.15 },
+            { label:'Orto',  data: rows.map(p=>({x:p.t,y:p.orto})),  borderColor:'#f87171', borderWidth:2.4, pointRadius:0, tension:0.15 }
         ]}, options: baseOpts });
 
-        // Scala SEMPRE fissa a +-0.3°C, come richiesto: anche se un dato sporco
-        // dovesse sfuggire al filtro despike, il grafico non si "schiaccia" -
-        // quel punto verrebbe semplicemente tagliato fuori dai bordi.
-        const yMin = -0.3, yMax = 0.3;
+        // Scala SEMPRE fissa a +-0.3°C, in tutte e tre le viste: anche se un
+        // dato sporco dovesse sfuggire al filtro despike, il grafico non si
+        // "schiaccia" - quel punto verrebbe semplicemente tagliato fuori dai bordi.
         const deltaOpts = JSON.parse(JSON.stringify(baseOpts));
-        deltaOpts.scales.y.min = yMin; deltaOpts.scales.y.max = yMax;
-        new Chart(el('cDelta'), { type:'line', data:{ datasets:[
-            { label:'ΔT (Tetto − Orto)', data: withDelta.map(p=>({x:p.t,y:p.delta})), borderColor:'#38bdf8', borderWidth:2.2, pointRadius:0, tension:0.15,
+        deltaOpts.scales.y.min = -0.3; deltaOpts.scales.y.max = 0.3;
+        chartDelta = new Chart(el('cDelta'), { type:'line', data:{ datasets:[
+            { label:'ΔT (Tetto − Orto)', data: rows.map(p=>({x:p.t,y:p.delta})), borderColor:'#38bdf8', borderWidth:2.2, pointRadius:0, tension:0.15,
               fill:{ target:{value:0}, above:'rgba(251,146,60,0.25)', below:'rgba(74,222,128,0.25)' } }
         ]}, options: deltaOpts });
-    }).catch(e=>{ console.warn(e); el('status').textContent='Errore nel caricamento dei dati'; });
+    }
+
+    function setMode(mode){
+        document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+        const idMap = { raw:'btnRaw', '10min':'btn10min', '30min':'btn30min' };
+        el(idMap[mode]).classList.add('active');
+        makeCharts(mode);
+    }
 </script>
 </body>
 </html>
