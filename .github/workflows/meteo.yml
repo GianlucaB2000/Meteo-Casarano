@@ -1,0 +1,11 @@
+name: Meteo Casarano
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test
+        run: echo "Meteo Casarano funziona!"
