@@ -50,3 +50,28 @@ print("Ultima lettura:", ultimo.get("created_at"))
 
 if ultimo.get("field1") is None and ultimo.get("field2") is None and ultimo.get("field3") is None:
     print("ATTENZIONE: temperatura, umidità e pressione non sono disponibili nell'ultima lettura.")
+# =========================
+# TEST TELEGRAM
+# =========================
+
+import os
+
+TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN")
+TG_CHAT_ID = os.environ.get("TG_CHAT_ID")
+
+if TG_BOT_TOKEN and TG_CHAT_ID:
+    telegram_url = f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage"
+
+    risposta = requests.get(
+        telegram_url,
+        params={
+            "chat_id": TG_CHAT_ID,
+            "text": "✅ Test Telegram GitHub Actions: connessione OK!"
+        },
+        timeout=20
+    )
+
+    print("Telegram HTTP:", risposta.status_code)
+    print("Telegram risposta:", risposta.text)
+else:
+    raise RuntimeError("Secret Telegram mancanti")
