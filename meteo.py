@@ -1,4 +1,3 @@
-```python
 import os
 import requests
 from statistics import mean
@@ -814,4 +813,4 @@ else:
     print(
         "Report orario non inviato."
     )
-```
+
