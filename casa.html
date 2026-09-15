@@ -82,6 +82,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .combo-afoso{background:rgba(227,179,65,.15);color:var(--orn);border:1px solid var(--orn);}
 .combo-caldo{background:rgba(248,81,73,.15);color:var(--red);border:1px solid var(--red);}
 
+/* Legenda soglie sotto i quadranti */
+.gauge-legend{display:flex;flex-wrap:wrap;gap:10px 18px;justify-content:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--brd);}
+.gl-item{display:flex;align-items:center;gap:6px;font-size:.62rem;color:var(--sub);}
+.gl-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.gl-dot.blue{background:var(--acc);}
+.gl-dot.green{background:var(--grn);}
+.gl-dot.red{background:var(--red);}
+.gl-dot.orange{background:var(--ylw);}
+
 /* Derived metrics grid */
 .mini-grid{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-top:2px;}
 .mini-card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:9px 11px;}
@@ -128,6 +137,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             <span class="combo-badge" id="comboBadge">--</span>
         </div>
         <div class="gauge-note" id="gaugeHumidexNote"></div>
+        <div class="gauge-legend">
+            <span class="gl-item"><span class="gl-dot blue"></span>Temp &lt; 19°C = freddo</span>
+            <span class="gl-item"><span class="gl-dot green"></span>Temp 19–26.5°C = confort</span>
+            <span class="gl-item"><span class="gl-dot red"></span>Temp &gt; 26.5°C = caldo</span>
+            <span class="gl-item"><span class="gl-dot orange"></span>Umidità &lt; 35% = secca</span>
+            <span class="gl-item"><span class="gl-dot green"></span>Umidità 35–60% = confort</span>
+            <span class="gl-item"><span class="gl-dot red"></span>Umidità &gt; 60% = afosa</span>
+        </div>
     </div>
 
     <div class="sec">Ultimo rilievo</div>
@@ -225,12 +242,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         <button class="ct-btn" id="btn30d" onclick="setPeriod('30d')">30 giorni</button>
         <button class="ct-btn" id="btnAnno" onclick="setPeriod('anno')">Anno</button>
         <label class="overlay-toggle"><input type="checkbox" id="overlayToggle" onchange="onOverlayToggle()">Sovrapponi Tetto (inerzia termica)</label>
+        <button class="ct-btn" id="btnDelta" onclick="toggleDeltaChart()">📊 Delta Casa-Tetto</button>
         <span style="font-size:.6rem;color:var(--sub);margin-left:4px;" id="chartStatus">Caricamento...</span>
     </div>
     <div class="chart-grid">
         <div class="chart-box"><div class="chart-title">🌡 Temperatura (°C)</div><div class="chart-wrap"><canvas id="chartT"></canvas></div></div>
         <div class="chart-box"><div class="chart-title">🥵 Temperatura Percepita — Humidex (°C)</div><div class="chart-wrap"><canvas id="chartHx"></canvas></div></div>
         <div class="chart-box"><div class="chart-title">💧 Umidità (%)</div><div class="chart-wrap"><canvas id="chartH"></canvas></div></div>
+        <div class="chart-box" id="deltaChartBox" style="display:none;">
+            <div class="chart-title">↕️ Delta Termico Casa − Tetto (°C)</div>
+            <div class="chart-wrap"><canvas id="chartDelta"></canvas></div>
+            <p class="note" style="margin-top:8px;">Sopra lo zero: dentro casa fa più caldo che fuori. Sotto lo zero: dentro fa più fresco. Utile per vedere quanto la casa "smorza" il caldo esterno e con quanto ritardo.</p>
+        </div>
     </div>
 </div>
 
@@ -247,7 +270,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     const FIELD = { temp:1, hum:2, pRaw:3, pSlm:5 };
     // Versione cache: incrementarla forza il browser a non riutilizzare risposte
     // HTTP precedenti (es. dopo aver corretto un buco di dati / bug di fetch).
-    const CACHE_VER = 'v4';
+    const CACHE_VER = 'v5';
     // Piccola pausa tra le richieste a chunk in sequenza, per non superare i
     // limiti di rate di ThingSpeak (che altrimenti scarta/tronca le risposte).
     function sleep(ms){ return new Promise(res=>setTimeout(res,ms)); }
@@ -303,39 +326,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         const e=6.112*Math.pow(10,(7.5*t)/(237.7+t))*(rh/100);
         return t+0.5555*(e-10);
     }
-    function comfortInfo(t,rh){
-        // Indice combinato semplificato: temperatura + umidità relativa (per i badge sulle card)
-        if(isNaN(t)||isNaN(rh)) return {label:'--', cls:''};
-        if(t>=28) return {label:'Troppo Caldo', cls:'badge-caldo'};
-        if(t<=16) return {label:'Troppo Freddo', cls:'badge-freddo'};
-        if(rh>=65) return {label:'Afa Indoor', cls:'badge-afa'};
-        if(rh<35) return {label:'Aria Secca', cls:'badge-secco'};
-        if(rh>=45 && rh<=60 && t>18 && t<26) return {label:'Ottimale', cls:'badge-ottimale'};
-        return {label:'Accettabile', cls:'badge-ottimale'};
-    }
-    // ─── Logica di comfort combinato (T + UR + Humidex) per il badge sotto i quadranti ───
+    // ─── Soglie di comfort UNIFICATE (stessa fonte usata da mini-card, badge
+    // grande, badge di temperatura/umidità e colori dei quadranti):
+    // Temperatura: <19 freddo, 19-26.5 confort, >26.5 caldo
+    // Umidità: <35 secca, 35-60 confort, >60 afosa ───
+    const COMFORT_T_MIN=19, COMFORT_T_MAX=26.5, COMFORT_RH_MIN=35, COMFORT_RH_MAX=60;
+    // Unica funzione di comfort combinato (T + UR + Humidex), usata sia per la
+    // mini-card "Comfort termico" sia per il badge grande sotto i quadranti.
     // Ordine di valutazione: CALDO AFA > UMIDO/AFOSO > FREDDO > SECCO > OTTIMALE > Nella norma
     function combinedComfort(t,rh,hx){
         if(isNaN(t)||isNaN(rh)) return {label:'--', cls:''};
-        if(t>26.5 || (!isNaN(hx) && hx>=34)) return {label:'Caldo Afa', cls:'combo-caldo'};
-        if(t>=24.5 && t<=26.5 && rh>60) return {label:'Umido / Afoso', cls:'combo-afoso'};
-        if(t<19) return {label:'Freddo', cls:'combo-freddo'};
-        if(rh<35) return {label:'Secco', cls:'combo-secco'};
-        if(t>=20 && t<=24.5 && rh>=40 && rh<=60) return {label:'Si Sta Bene', cls:'combo-ottimale'};
+        if(t>COMFORT_T_MAX+1.5 || (!isNaN(hx) && hx>=34)) return {label:'Caldo Afa', cls:'combo-caldo'};
+        if(t>=COMFORT_T_MAX-2 && t<=COMFORT_T_MAX+1.5 && rh>COMFORT_RH_MAX) return {label:'Umido / Afoso', cls:'combo-afoso'};
+        if(t<COMFORT_T_MIN) return {label:'Freddo', cls:'combo-freddo'};
+        if(rh<COMFORT_RH_MIN) return {label:'Secco', cls:'combo-secco'};
+        if(t>=COMFORT_T_MIN+1 && t<=COMFORT_T_MAX-2 && rh>=COMFORT_RH_MIN+5 && rh<=COMFORT_RH_MAX) return {label:'Si Sta Bene', cls:'combo-ottimale'};
         return {label:'Nella Norma', cls:'combo-ottimale'};
     }
     function tempBadge(t){
         if(isNaN(t)) return {label:'--', cls:''};
-        if(t>28) return {label:'Alta', cls:'badge-caldo'};
-        if(t<16) return {label:'Bassa', cls:'badge-freddo'};
+        if(t>COMFORT_T_MAX) return {label:'Alta', cls:'badge-caldo'};
+        if(t<COMFORT_T_MIN) return {label:'Bassa', cls:'badge-freddo'};
         return {label:'Normale', cls:'badge-ottimale'};
     }
     function humBadge(rh){
         if(isNaN(rh)) return {label:'--', cls:''};
-        if(rh>65) return {label:'Alta', cls:'badge-caldo'};
-        if(rh<35) return {label:'Secca', cls:'badge-secco'};
-        if(rh>=45 && rh<=60) return {label:'Ottimale', cls:'badge-ottimale'};
-        return {label:'Normale', cls:''};
+        if(rh>COMFORT_RH_MAX) return {label:'Alta', cls:'badge-caldo'};
+        if(rh<COMFORT_RH_MIN) return {label:'Secca', cls:'badge-secco'};
+        return {label:'Ottimale', cls:'badge-ottimale'};
     }
     // Fasce di disagio da Humidex (Environment Canada, semplificate)
     function humidexBadge(hx){
@@ -354,33 +372,31 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         const dp=calcDewPoint(t,rh);
         const ah=calcAbsHumidity(t,rh);
         const hx=calcHumidex(t,rh);
-        const cf=comfortInfo(t,rh);
+        // La mini-card "Comfort termico" ora usa la STESSA funzione del badge
+        // grande sotto i quadranti (combinedComfort), cosi' danno sempre lo
+        // stesso verdetto sullo stesso dato.
+        const combo=combinedComfort(t,rh,hx);
         el('dewPoint').textContent=fmt(dp);
         el('absHum').textContent=fmt(ah);
         el('humidex').textContent=fmt(hx);
-        el('comfortLabel').textContent=cf.label;
+        el('comfortLabel').textContent=combo.label;
         applyBadge('badgeTemp', tempBadge(t));
         applyBadge('badgeHum', humBadge(rh));
         // Bordo card dinamico
         const cardT=el('cardT'), cardH=el('cardH'), cardHx=el('cardHx');
-        cardT.style.borderColor = t>28?'var(--red)': t<16?'var(--acc)':'var(--brd)';
-        cardH.style.borderColor = rh>65?'var(--red)': rh<35?'var(--ylw)': (rh>=45&&rh<=60)?'var(--grn)':'var(--brd)';
+        cardT.style.borderColor = t>COMFORT_T_MAX?'var(--red)': t<COMFORT_T_MIN?'var(--acc)':'var(--brd)';
+        cardH.style.borderColor = rh>COMFORT_RH_MAX?'var(--red)': rh<COMFORT_RH_MIN?'var(--ylw)': (rh>=COMFORT_RH_MIN&&rh<=COMFORT_RH_MAX)?'var(--grn)':'var(--brd)';
         // Card Temperatura Percepita (Humidex): valore live + badge di disagio
         el('Hx').textContent = fmt(hx);
         applyBadge('badgeHx', humidexBadge(hx));
         cardHx.style.borderColor = hx>=40?'var(--red)': hx>=34?'var(--orn)': 'var(--brd)';
         drawGauges(t,rh,hx);
-        const combo=combinedComfort(t,rh,hx);
         const comboEl=el('comboBadge');
         comboEl.textContent=combo.label.toUpperCase();
         comboEl.className='combo-badge'+(combo.cls?' '+combo.cls:'');
     }
 
     // ─── Quadrante analogico SVG (termometro/igrometro a lancetta) ───
-    // Le lancette sono elementi SVG persistenti (creati una sola volta con initGauges);
-    // ad ogni aggiornamento si ruota solo il gruppo <g> della lancetta con
-    // transform="rotate(deg cx cy)", cosi' il movimento e' realmente dinamico
-    // e animato via CSS (transition su transform).
     function polar(cx,cy,r,angleDeg){
         const a=(angleDeg-180)*Math.PI/180;
         return {x:cx+r*Math.cos(a), y:cy+r*Math.sin(a)};
@@ -391,29 +407,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         return 'M '+s.x+' '+s.y+' A '+r+' '+r+' 0 '+largeArc+' 1 '+e.x+' '+e.y;
     }
     const GAUGE_CX=75, GAUGE_CY=85, GAUGE_R=62;
-    // Converte un valore reale in gradi (0-180) sul quadrante, in base a min/max
     function valToAngle(v,min,max){
         const c=Math.max(min,Math.min(max,v));
         return ((c-min)/(max-min))*180;
     }
-    // Converte i gradi del quadrante (0=min sx, 90=centro alto, 180=max dx) nella
-    // rotazione CSS/SVG da applicare a una lancetta disegnata di default verticale
-    // (puntata verso l'alto, corrispondente a 90°): rotate = angolo - 90.
     function angleToRotate(angleDeg){ return angleDeg-90; }
 
     function buildGaugeSkeleton(min,max,zones){
         const cx=GAUGE_CX, cy=GAUGE_CY, r=GAUGE_R;
         let svg='';
-        // Fascia di sfondo neutra dietro le zone, per dare continuità al quadrante
         svg += '<path d="'+arcPath(cx,cy,r,0,180)+'" stroke="#242c38" stroke-width="14" fill="none" stroke-linecap="round"/>';
         zones.forEach(z=>{
             const a1=valToAngle(z.from,min,max), a2=valToAngle(z.to,min,max);
             svg += '<path d="'+arcPath(cx,cy,r,a1,a2)+'" stroke="'+z.color+'" stroke-width="14" fill="none" stroke-linecap="butt"/>';
         });
-        // tacche min/max
         svg += '<text x="'+(cx-r-2)+'" y="'+(cy+16)+'" font-size="9" fill="#8b949e">'+min+'</text>';
         svg += '<text x="'+(cx+r-10)+'" y="'+(cy+16)+'" font-size="9" fill="#8b949e">'+max+'</text>';
-        // lancetta, verticale di default, ruotata via transform
         svg += '<g class="needle-main" id="__NEEDLE1__"><line x1="'+cx+'" y1="'+cy+'" x2="'+cx+'" y2="'+(cy-(r-18))+'" stroke="#e6edf3" stroke-width="2.5" stroke-linecap="round"/></g>';
         svg += '<circle cx="'+cx+'" cy="'+cy+'" r="4.5" fill="#e6edf3"/>';
         return svg;
@@ -421,14 +430,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     let gaugesInit=false;
     function initGauges(){
         const tempZones=[
-            {from:-10,to:19,color:'#58a6ff'},
-            {from:19,to:26.5,color:'#3fb950'},
-            {from:26.5,to:40,color:'#f85149'}
+            {from:-10,to:COMFORT_T_MIN,color:'#58a6ff'},
+            {from:COMFORT_T_MIN,to:COMFORT_T_MAX,color:'#3fb950'},
+            {from:COMFORT_T_MAX,to:40,color:'#f85149'}
         ];
         const humZones=[
-            {from:0,to:35,color:'#d29922'},
-            {from:35,to:60,color:'#3fb950'},
-            {from:60,to:100,color:'#f85149'}
+            {from:0,to:COMFORT_RH_MIN,color:'#d29922'},
+            {from:COMFORT_RH_MIN,to:COMFORT_RH_MAX,color:'#3fb950'},
+            {from:COMFORT_RH_MAX,to:100,color:'#f85149'}
         ];
         let tSvg = buildGaugeSkeleton(-10,40,tempZones);
         tSvg = tSvg.replace('__NEEDLE1__','needleTempMain');
@@ -446,10 +455,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         if(!gaugesInit) initGauges();
         if(!isNaN(t)) setNeedle('needleTempMain', angleToRotate(valToAngle(t,-10,40)));
         if(!isNaN(rh)) setNeedle('needleHumMain', angleToRotate(valToAngle(rh,0,100)));
-        // Valori numerici correnti mostrati SOLO sotto i rispettivi quadranti
         el('gaugeTempValue').textContent = fmt(t)+' °C';
         el('gaugeHumValue').textContent = fmt(rh)+' %';
-        // Avviso per Humidex in fascia di estremo disagio
         const noteEl = el('gaugeHumidexNote');
         if(!isNaN(hx) && hx>40){
             noteEl.textContent = '⚠ Humidex '+fmt(hx)+'°C — Estremo Disagio / Rischio Colpo di Calore (soglia: >40°C)';
@@ -487,13 +494,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         if(!feeds || feeds.length<2) return null;
         const vals = feeds.map(f=>parseFloat(f['field'+field])).filter(v=>!isNaN(v));
         if(vals.length<2) return null;
-        // Mediana dei primi/ultimi campioni della finestra per ridurre il rumore
         const firstWin = vals.slice(0, Math.min(3,vals.length));
         const lastWin = vals.slice(-Math.min(3,vals.length));
         return median(lastWin) - median(firstWin);
     }
-    // Come computeTrend, ma sull'Humidex calcolato punto per punto dalla
-    // coppia T/UR di ogni campione (l'Humidex non è un campo ThingSpeak diretto).
     function computeTrendHumidex(feeds){
         if(!feeds || feeds.length<2) return null;
         const vals = feeds.map(f=>{
@@ -515,7 +519,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         e.className = 'trend '+(delta>0.01?'up':delta<-0.01?'down':'flat');
     }
     function fetchTrend(){
-        // Finestra di 65 minuti per confrontare il valore attuale con quello di ~1h fa
         const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'minutes=65&_v='+CACHE_VER;
         fetch(url).then(r=>r.json()).then(data=>{
             if(!data||!data.feeds||!data.feeds.length) return;
@@ -528,9 +531,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         }).catch(e=>console.warn('[casa trend]',e));
     }
     function fetchLive(){
-        // Uso la mediana degli ultimi 5 campioni (non solo l'ultimo) cosi' un
-        // singolo dato anomalo (glitch del firmware) non finisce mostrato come
-        // valore "attuale".
         const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'results=5&_v='+CACHE_VER;
         fetch(url).then(r=>r.json()).then(data=>{
             if(!data||!data.feeds||!data.feeds.length) return;
@@ -550,16 +550,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         }).catch(e=>console.warn('[casa live]',e));
     }
 
-    // ─── Estremi mese/anno: risoluzione 10 min, con retry e richieste in
-    // sequenza (non tutte insieme) per non farsi scartare dati da ThingSpeak,
-    // stessa correzione fatta per il Tetto. ───
-    // IMPORTANTE: ThingSpeak, quando riceve richieste troppo ravvicinate,
-    // spesso non risponde con un errore ma con HTTP 200 e feeds=[] (un
-    // "fallimento silenzioso"). Prima questo veniva interpretato come "nessun
-    // dato in quel periodo" e il chunk (fino a 30 giorni, nella vista Anno)
-    // veniva perso senza nessun retry: era la causa dei buchi da circa un
-    // mese nel grafico. Ora un array vuoto viene ritentato come un errore
-    // vero, fino a 3 volte con backoff crescente.
+    // ─── Estremi mese/anno: risoluzione 10 min, con retry e richieste in sequenza ───
     function fetchChunkRaw(start,end,aggMin,attempt){
         attempt = attempt || 0;
         const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'start='+start.toISOString()+'&end='+end.toISOString()+(aggMin?'&median='+aggMin:'')+'&_v='+CACHE_VER;
@@ -590,9 +581,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             cursor=chunkEnd;
         }
         let results=[];
-        // Richieste in sequenza (non in parallelo) con una pausa tra un chunk
-        // e l'altro: evita che ThingSpeak scarti o tronchi le risposte per
-        // troppe richieste ravvicinate (causa nota dei "buchi" nei grafici).
         return ranges.reduce((p,r,i)=>p.then(()=>fetchChunkRaw(r[0],r[1],aggMin).then(f=>{
             results.push(f);
             return i<ranges.length-1 ? sleep(400) : Promise.resolve();
@@ -615,8 +603,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         });
         return {mn:mn===Infinity?null:mn, mx:mx===-Infinity?null:mx, mnDt, mxDt};
     }
-    // Estremi dell'Humidex: calcolato punto per punto dalla coppia T/UR di ogni
-    // campione, dato che non è un campo ThingSpeak diretto come temperatura/umidità.
     function calcExtremesHumidex(feeds){
         let mn=Infinity,mx=-Infinity,mnDt='',mxDt='';
         feeds.forEach(f=>{
@@ -664,7 +650,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     let period='24h';
     let charts={};
     let overlayOn=false;
+    let deltaChartOn=false;
     let lastCasaFeeds=[];
+    let lastTettoFeeds=[];
     function setPeriod(p){
         period=p;
         el('btn24h').classList.toggle('active',p==='24h');
@@ -677,6 +665,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         overlayOn = el('overlayToggle').checked;
         loadCharts(period);
     }
+    // ─── Tab/pulsante dedicato per il grafico del delta termico Casa-Tetto ───
+    // Indipendente dal toggle "Sovrapponi Tetto": mostra/nasconde il riquadro
+    // del grafico delta e, se necessario, scarica i dati del Tetto per calcolarlo.
+    function toggleDeltaChart(){
+        deltaChartOn = !deltaChartOn;
+        el('btnDelta').classList.toggle('active', deltaChartOn);
+        el('deltaChartBox').style.display = deltaChartOn ? '' : 'none';
+        if(deltaChartOn) loadDeltaChart();
+    }
     function rangeParams(p){
         const end=new Date(); let start=new Date(); let aggMin=null, chunkDays=4;
         if(p==='24h'){ start.setHours(start.getHours()-24); aggMin=null; }
@@ -685,8 +682,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         else if(p==='anno'){ start.setFullYear(start.getFullYear()-1); aggMin=720; chunkDays=30; }
         return {start,end,aggMin,chunkDays};
     }
-    // Stessa correzione anti-throttling di fetchChunkRaw: un array vuoto viene
-    // ritentato come un errore, non accettato come "nessun dato".
     function fetchTettoChunk(start,end,aggMin,attempt){
         attempt = attempt || 0;
         const url='https://api.thingspeak.com/channels/'+TS_CH_TETTO+'/feeds.json?api_key='+TS_RKEY_TETTO+'&start='+start.toISOString()+'&end='+end.toISOString()+(aggMin?'&median='+aggMin:'')+'&_v='+CACHE_VER;
@@ -737,7 +732,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         return feeds.map((f,i)=>({x:new Date(f.created_at).getTime(), y: clean[i]===null?null:Number(clean[i].toFixed(2))}));
     }
     function humidexSeriesFrom(feeds){
-        // Calcola l'Humidex (temperatura percepita) punto per punto dalla coppia T/UR di ogni campione
         const tRaw = feeds.map(f=>(f['field'+FIELD.temp]===null||f['field'+FIELD.temp]===undefined||f['field'+FIELD.temp]==='')?null:parseFloat(f['field'+FIELD.temp]));
         const hRaw = feeds.map(f=>(f['field'+FIELD.hum]===null||f['field'+FIELD.hum]===undefined||f['field'+FIELD.hum]==='')?null:parseFloat(f['field'+FIELD.hum]));
         const tClean = despike(tRaw, 2.5);
@@ -747,6 +741,67 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             const hx = (t===null||h===null) ? null : calcHumidex(t,h);
             return {x:new Date(f.created_at).getTime(), y: (hx===null||isNaN(hx))?null:Number(hx.toFixed(2))};
         });
+    }
+    // ─── Allineamento per timestamp più vicino: Casa e Tetto non campionano
+    // esattamente allo stesso istante, quindi per ogni punto Casa cerco il
+    // punto Tetto più vicino nel tempo (entro una tolleranza), altrimenti scarto. ───
+    function alignByTimestamp(feedsA, fieldA, feedsB, fieldB, toleranceMs){
+        const bPoints = feedsB.map(f=>({t:new Date(f.created_at).getTime(), v:parseFloat(f['field'+fieldB])})).filter(p=>!isNaN(p.v));
+        bPoints.sort((a,b)=>a.t-b.t);
+        function nearest(t){
+            let lo=0, hi=bPoints.length-1, best=null, bestDiff=Infinity;
+            while(lo<=hi){
+                const mid=(lo+hi)>>1;
+                const diff=Math.abs(bPoints[mid].t-t);
+                if(diff<bestDiff){ bestDiff=diff; best=bPoints[mid]; }
+                if(bPoints[mid].t<t) lo=mid+1; else hi=mid-1;
+            }
+            return (best && bestDiff<=toleranceMs) ? best.v : null;
+        }
+        const out=[];
+        feedsA.forEach(f=>{
+            const va=parseFloat(f['field'+fieldA]);
+            if(isNaN(va)) return;
+            const t=new Date(f.created_at).getTime();
+            const vb=nearest(t);
+            if(vb===null) return;
+            out.push({x:t, y:Number((va-vb).toFixed(2))});
+        });
+        return out;
+    }
+    function loadDeltaChart(){
+        const {start,end,aggMin,chunkDays} = rangeParams(period);
+        el('chartStatus').textContent='Caricamento delta...';
+        Promise.all([
+            fetchRangeSeq(start,end,aggMin,chunkDays),
+            fetchTettoRange(start,end,aggMin,chunkDays)
+        ]).then(([casaFeeds,tettoFeeds])=>{
+            if(!casaFeeds.length || !tettoFeeds.length){ el('chartStatus').textContent='Nessun dato per il delta'; return; }
+            // Tolleranza di allineamento più larga per periodi lunghi (meno campioni ravvicinati)
+            const tolMs = (period==='24h') ? 15*60000 : (period==='anno' ? 24*3600000 : 3*3600000);
+            const tRaw = casaFeeds.map(f=>(f['field'+FIELD.temp]===null||f['field'+FIELD.temp]===undefined||f['field'+FIELD.temp]==='')?null:parseFloat(f['field'+FIELD.temp]));
+            const tClean = despike(tRaw, 2.5);
+            const casaFeedsClean = casaFeeds.map((f,i)=>Object.assign({},f,{['field'+FIELD.temp]: tClean[i]===null?'':tClean[i]}));
+            const deltaData = alignByTimestamp(casaFeedsClean, FIELD.temp, tettoFeeds, FIELD.temp, tolMs);
+            makeChart('chartDelta',[{
+                label:'Delta Casa - Tetto',
+                data:deltaData,
+                borderColor:'#e3b341',
+                borderWidth:2,
+                pointRadius:0,
+                pointHoverRadius:6,
+                pointHitRadius:14,
+                spanGaps:true,
+                fill:{target:{value:0}},
+                segment:{
+                    backgroundColor:ctx=>{
+                        const y = ctx.p0.parsed.y;
+                        return y>=0 ? 'rgba(227,179,65,0.18)' : 'rgba(88,166,255,0.18)';
+                    }
+                }
+            }],'°C (Casa − Tetto)');
+            el('chartStatus').textContent='Aggiornato: '+deltaData.length+' punti confrontati';
+        }).catch(e=>{ el('chartStatus').textContent='Errore caricamento delta'; console.warn(e); });
     }
     function loadCharts(p){
         el('chartStatus').textContent='Caricamento...';
@@ -770,6 +825,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             } else {
                 makeChart('chartT',tempDatasets,'°C');
             }
+            // Se il grafico delta è già aperto, aggiornalo insieme al resto quando cambia periodo
+            if(deltaChartOn) loadDeltaChart();
         }).catch(e=>{ el('chartStatus').textContent='Errore caricamento'; console.warn(e); });
     }
     function makeChart(id,datasets,yLabel,extraScales){
@@ -780,9 +837,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         };
         if(extraScales) Object.assign(scales, extraScales);
         const opts={ responsive:true, maintainAspectRatio:false, animation:{duration:300},
-            // 'index' + intersect:false: basta essere sulla stessa colonna verticale
-            // del grafico, non serve centrare esattamente il cursore sul punto
-            // (che tra l'altro è invisibile, pointRadius:0) per vedere il tooltip.
             interaction:{ mode:'index', intersect:false },
             plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:10}, boxWidth:12, padding:8 } },
                 tooltip:{ callbacks:{ label:function(c){ return c.dataset.label+': '+(c.parsed.y===null?'--':c.parsed.y.toFixed(2)); } } } },
