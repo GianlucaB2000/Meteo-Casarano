@@ -17,7 +17,7 @@ def valori(field):
         if valore is not None:
             try:
                 risultato.append(float(valore))
-            except ValueError:
+            except (ValueError, TypeError):
                 pass
     return risultato
 
@@ -30,13 +30,23 @@ print("=== METEO CASARANO ===")
 print("Letture ricevute:", len(feeds))
 
 if temperatura:
-    print(f"Temperatura: min {min(temperatura):.1f} °C | max {max(temperatura):.1f} °C | media {mean(temperatura):.1f} °C")
+    print(f"Temperatura: {min(temperatura):.1f} / {max(temperatura):.1f} °C | media {mean(temperatura):.1f} °C")
 
 if umidita:
-    print(f"Umidità: min {min(umidita):.1f}% | max {max(umidita):.1f}% | media {mean(umidita):.1f}%")
+    print(f"Umidità: {min(umidita):.1f} / {max(umidita):.1f}% | media {mean(umidita):.1f}%")
 
 if pressione:
-    print(f"Pressione: min {min(pressione):.1f} hPa | max {max(pressione):.1f} hPa | media {mean(pressione):.1f} hPa")
+    print(f"Pressione: {min(pressione):.1f} / {max(pressione):.1f} hPa | media {mean(pressione):.1f} hPa")
 
 if vento:
-    print(f"Vento: min {min(vento):.1f} | max {max(vento):.1f} | media {mean(vento):.1f}")
+    print(f"Vento: {min(vento):.1f} / {max(vento):.1f} | media {mean(vento):.1f}")
+
+# Controllo stazione
+if not feeds:
+    raise RuntimeError("Nessun dato ricevuto da ThingSpeak")
+
+ultimo = feeds[-1]
+print("Ultima lettura:", ultimo.get("created_at"))
+
+if ultimo.get("field1") is None and ultimo.get("field2") is None and ultimo.get("field3") is None:
+    print("ATTENZIONE: temperatura, umidità e pressione non sono disponibili nell'ultima lettura.")
