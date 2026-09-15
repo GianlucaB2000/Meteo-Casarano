@@ -3,17 +3,33 @@ import os
 import requests
 from statistics import mean
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
+
+# ============================================================
+# CONFIGURAZIONE
+# ============================================================
 
 CHANNEL_ID = 3217870
 
 TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN")
 TG_CHAT_ID = os.environ.get("TG_CHAT_ID")
 
+# Report orario di prova SOLO per oggi
+DATA_TEST_REPORT = "2026-09-15"
+
+# Fuso orario locale
+TZ_LOCALE = ZoneInfo("Europe/Rome")
+
+
 # ============================================================
 # THINGSPEAK - ULTIME 24 ORE
 # ============================================================
 
-url = f"https://api.thingspeak.com/channels/{CHANNEL_ID}/feeds.json?days=1"
+url = (
+    f"https://api.thingspeak.com/channels/"
+    f"{CHANNEL_ID}/feeds.json?days=1"
+)
 
 r = requests.get(url, timeout=30)
 r.raise_for_status()
@@ -46,7 +62,8 @@ def invia_telegram(testo):
         return
 
     telegram_url = (
-        f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage"
+        f"https://api.telegram.org/bot"
+        f"{TG_BOT_TOKEN}/sendMessage"
     )
 
     risposta = requests.get(
@@ -58,11 +75,14 @@ def invia_telegram(testo):
         timeout=20
     )
 
-    print("Telegram:", risposta.status_code)
+    print("Telegram HTTP:", risposta.status_code)
+
+    if risposta.status_code != 200:
+        print("Telegram risposta:", risposta.text)
 
 
 # ============================================================
-# CONTROLLO DATI
+# CONTROLLO GENERALE
 # ============================================================
 
 print("=== METEO CASARANO ===")
@@ -73,8 +93,13 @@ if not feeds:
         "🚨 ALERT METEO CASARANO\n\n"
         "Nessun dato ricevuto da ThingSpeak."
     )
+
     raise RuntimeError("Nessun dato ricevuto da ThingSpeak")
 
+
+# ============================================================
+# LETTURA CAMPI
+# ============================================================
 
 temperatura = valori("field1")
 umidita = valori("field2")
@@ -88,28 +113,32 @@ vento = valori("field4")
 
 if temperatura:
     print(
-        f"Temperatura: {min(temperatura):.1f} / "
+        f"Temperatura 24h: "
+        f"{min(temperatura):.1f} / "
         f"{max(temperatura):.1f} °C | "
         f"media {mean(temperatura):.1f} °C"
     )
 
 if umidita:
     print(
-        f"Umidità: {min(umidita):.1f} / "
+        f"Umidità 24h: "
+        f"{min(umidita):.1f} / "
         f"{max(umidita):.1f}% | "
         f"media {mean(umidita):.1f}%"
     )
 
 if pressione:
     print(
-        f"Pressione: {min(pressione):.1f} / "
+        f"Pressione 24h: "
+        f"{min(pressione):.1f} / "
         f"{max(pressione):.1f} hPa | "
         f"media {mean(pressione):.1f} hPa"
     )
 
 if vento:
     print(
-        f"Vento: {min(vento):.1f} / "
+        f"Vento 24h: "
+        f"{min(vento):.1f} / "
         f"{max(vento):.1f} | "
         f"media {mean(vento):.1f}"
     )
@@ -127,35 +156,54 @@ print("Ultima lettura:", created_at)
 minuti = None
 
 if not created_at:
+
     invia_telegram(
         "🚨 ALERT METEO CASARANO\n\n"
         "Ultima lettura ThingSpeak senza timestamp."
     )
+
 else:
+
     try:
+
         ultima_data = datetime.fromisoformat(
             created_at.replace("Z", "+00:00")
         )
 
-        adesso = datetime.now(timezone.utc)
+        adesso_utc = datetime.now(timezone.utc)
 
-        minuti = (adesso - ultima_data).total_seconds() / 60
+        minuti = (
+            adesso_utc - ultima_data
+        ).total_seconds() / 60
 
-        print(f"Età ultima lettura: {minuti:.1f} minuti")
+        print(
+            f"Età ultima lettura: "
+            f"{minuti:.1f} minuti"
+        )
+
+        # ----------------------------------------------------
+        # STAZIONE OFFLINE
+        # ----------------------------------------------------
 
         if minuti > 10:
+
             invia_telegram(
                 "🚨 ALERT METEO CASARANO\n\n"
-                f"Stazione senza aggiornamenti da {minuti:.1f} minuti.\n"
+                f"Stazione senza aggiornamenti da "
+                f"{minuti:.1f} minuti.\n"
                 f"Ultima lettura: {created_at}"
             )
 
     except Exception as e:
-        print("Errore controllo timestamp:", e)
+
+        print(
+            "Errore controllo timestamp:",
+            e
+        )
 
 
 # ============================================================
-# DATI MANCANTI
+# CONTROLLO DATI MANCANTI
 # ============================================================
 
 mancanti = []
@@ -171,53 +219,135 @@ if ultimo.get("field3") is None:
 
 
 if mancanti:
+
     testo = (
         "⚠️ ALERT METEO CASARANO\n\n"
         "Dati mancanti nell'ultima lettura:\n"
-        + "\n".join(f"- {x}" for x in mancanti)
+        + "\n".join(
+            f"- {x}" for x in mancanti
+        )
     )
 
     invia_telegram(testo)
 
 
 # ============================================================
-# REPORT ORARIO - TEST SOLO PER OGGI
+# ORA LOCALE
 # ============================================================
 
-if temperatura or umidita or pressione or vento:
+adesso_locale = datetime.now(TZ_LOCALE)
 
-    testo = "📊 REPORT ORARIO METEO CASARANO\n\n"
+data_locale = adesso_locale.strftime("%Y-%m-%d")
+ora_locale = adesso_locale.hour
+minuto_locale = adesso_locale.minute
+
+print(
+    f"Ora locale: "
+    f"{adesso_locale.strftime('%d/%m/%Y %H:%M:%S')}"
+)
+
+
+# ============================================================
+# REPORT ORARIO
+# SOLO IL 15/09/2026
+# ============================================================
+
+if (
+    data_locale == DATA_TEST_REPORT
+    and minuto_locale < 5
+):
+
+    testo = (
+        "📊 REPORT ORARIO METEO CASARANO\n\n"
+    )
+
+    # --------------------------------------------------------
+    # TEMPERATURA
+    # --------------------------------------------------------
 
     if temperatura:
+
         testo += (
-            f"🌡️ Temperatura: {temperatura[-1]:.1f} °C\n"
-            f"   24h: {min(temperatura):.1f} / "
-            f"{max(temperatura):.1f} °C\n"
+            f"🌡️ Temperatura: "
+            f"{temperatura[-1]:.1f} °C\n"
+            f"   Min 24h: {min(temperatura):.1f} °C\n"
+            f"   Max 24h: {max(temperatura):.1f} °C\n\n"
         )
+
+    # --------------------------------------------------------
+    # UMIDITÀ
+    # --------------------------------------------------------
 
     if umidita:
+
         testo += (
-            f"💧 Umidità: {umidita[-1]:.1f}%\n"
-            f"   24h: {min(umidita):.1f} / "
-            f"{max(umidita):.1f}%\n"
+            f"💧 Umidità: "
+            f"{umidita[-1]:.1f}%\n"
+            f"   Min 24h: {min(umidita):.1f}%\n"
+            f"   Max 24h: {max(umidita):.1f}%\n\n"
         )
+
+    # --------------------------------------------------------
+    # PRESSIONE
+    # --------------------------------------------------------
 
     if pressione:
+
         testo += (
-            f"🌡️ Pressione: {pressione[-1]:.1f} hPa\n"
-            f"   24h: {min(pressione):.1f} / "
-            f"{max(pressione):.1f} hPa\n"
+            f"🔵 Pressione: "
+            f"{pressione[-1]:.1f} hPa\n"
+            f"   Min 24h: {min(pressione):.1f} hPa\n"
+            f"   Max 24h: {max(pressione):.1f} hPa\n\n"
         )
+
+    # --------------------------------------------------------
+    # VENTO
+    # --------------------------------------------------------
 
     if vento:
+
         testo += (
-            f"💨 Vento: {vento[-1]:.1f}\n"
-            f"   24h: {min(vento):.1f} / "
-            f"{max(vento):.1f}\n"
+            f"💨 Vento: "
+            f"{vento[-1]:.1f}\n"
+            f"   Min 24h: {min(vento):.1f}\n"
+            f"   Max 24h: {max(vento):.1f}\n\n"
         )
 
-    if created_at:
-        testo += f"\n🕐 Ultima lettura: {created_at}"
+    # --------------------------------------------------------
+    # STATO STAZIONE
+    # --------------------------------------------------------
+
+    if minuti is not None:
+
+        if minuti <= 10:
+
+            testo += "🟢 Stazione: ONLINE\n"
+
+        else:
+
+            testo += (
+                f"🔴 Stazione: OFFLINE "
+                f"({minuti:.1f} min)\n"
+            )
+
+    # --------------------------------------------------------
+    # TIMESTAMP
+    # --------------------------------------------------------
+
+    testo += (
+        f"\n🕐 Ultima lettura:\n"
+        f"{created_at}"
+    )
+
+    print("\n=== INVIO REPORT ORARIO ===")
+    print(testo)
 
     invia_telegram(testo)
+
+else:
+
+    print(
+        "Nessun report orario: "
+        "non siamo nella finestra prevista."
+    )
 ```
