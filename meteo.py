@@ -14,6 +14,8 @@ TG_CHAT_ID = os.environ.get("TG_CHAT_ID")
 DATA_TEST_REPORT = "2026-09-16"
 TZ_LOCALE = ZoneInfo("Europe/Rome")
 
+FILE_STATO_REPORT = "ultimo_report.txt"
+
 
 def invia_telegram(testo):
     if not TG_BOT_TOKEN or not TG_CHAT_ID:
@@ -192,7 +194,8 @@ def pressione_tre_ore(feeds):
     target = ultimo_tempo.timestamp() - (3 * 3600)
 
     precedenti = [
-        punto for punto in punti[:-1]
+        punto
+        for punto in punti[:-1]
         if punto[0].timestamp() <= ultimo_tempo.timestamp()
     ]
 
@@ -213,8 +216,6 @@ def pressione_tre_ore(feeds):
     if delta_tempo <= 0:
         return None, None
 
-    # Normalizzazione a hPa/3h,
-    # come richiesto dalla logica Zambretti dell'ESP.
     delta_pressione = (
         ultima_pressione - precedente[1]
     ) * (3 * 3600 / delta_tempo)
@@ -235,9 +236,8 @@ def calcola_zambretti(pressione, delta_3h):
     """
     Replica calcZambrettiIndex() dell'ESP.
 
-    p      = pressione al livello del mare
-    trend  = hPa/3h
-    mese   = mese locale corrente
+    pressione = pressione al livello del mare
+    delta_3h  = variazione normalizzata in hPa/3h
     """
 
     if pressione is None or delta_3h is None:
@@ -248,14 +248,11 @@ def calcola_zambretti(pressione, delta_3h):
 
     mese = datetime.now(TZ_LOCALE).month
 
-    # Correzione base dell'ESP
     pc = pressione + 10
 
-    # Correzione stagionale maggio-settembre
     if 5 <= mese <= 9:
         pc += 5
 
-    # Pressione in decimi di hPa, arrotondata
     P = int(pc * 10 + 0.5)
 
     estate = 6 <= mese <= 8
@@ -263,7 +260,6 @@ def calcola_zambretti(pressione, delta_3h):
 
     if delta_3h > 1.6:
 
-        # Pressione in salita
         z = 179 - (2 * P) // 129
 
         if estate:
@@ -274,11 +270,8 @@ def calcola_zambretti(pressione, delta_3h):
 
         z = max(20, min(32, z))
 
-        trend = "IN SALITA"
-
     elif delta_3h < -1.6:
 
-        # Pressione in discesa
         z = 130 - P // 81
 
         if estate:
@@ -289,16 +282,11 @@ def calcola_zambretti(pressione, delta_3h):
 
         z = max(1, min(9, z))
 
-        trend = "IN DISCESA"
-
     else:
 
-        # Pressione stabile
         z = 147 - (5 * P) // 376
 
         z = max(10, min(19, z))
-
-        trend = "STABILE"
 
     lettera = ZAM_TABLE[z]
 
@@ -519,12 +507,24 @@ if mancanti_casa:
 adesso_locale = datetime.now(TZ_LOCALE)
 
 data_locale = adesso_locale.strftime("%Y-%m-%d")
-minuto_locale = adesso_locale.minute
+ora_corrente = adesso_locale.strftime("%Y-%m-%d-%H")
 
+ultimo_report = ""
+
+try:
+    with open(FILE_STATO_REPORT, "r") as f:
+        ultimo_report = f.read().strip()
+
+except FileNotFoundError:
+    ultimo_report = ""
+
+
+# Il report viene inviato una sola volta per ogni ora.
+# Non dipende dal minuto esatto di esecuzione di GitHub Actions.
 
 if (
     data_locale == DATA_TEST_REPORT
-    and minuto_locale < 5
+    and ora_corrente != ultimo_report
 ):
 
     testo = (
@@ -777,6 +777,10 @@ if (
 
 
     invia_telegram(testo)
+
+    # Memorizza l'ora appena inviata.
+    with open(FILE_STATO_REPORT, "w") as f:
+        f.write(ora_corrente)
 
     print("Report orario Telegram inviato.")
 
