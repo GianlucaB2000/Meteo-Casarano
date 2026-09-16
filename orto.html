@@ -19,6 +19,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
 .wrap{max-width:960px;margin:0 auto;padding:12px 10px 0;}
 .sec{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--sub);margin:14px 0 7px;padding-left:2px;}
+.chart-sec{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;row-gap:8px;}
+.chart-toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.ct-btn{background:var(--bg3);border:1px solid var(--brd);color:var(--sub);font-size:.68rem;padding:6px 11px;border-radius:8px;cursor:pointer;}
+.ct-btn.active{color:var(--acc);border-color:var(--acc);}
+.chart-status-line{font-size:.6rem;color:var(--sub);margin:0 0 8px 2px;}
 .grid{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));}
 .card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:11px 13px;}
 .lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sub);margin-bottom:4px;}
@@ -39,22 +44,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .ex-panel.show{display:block;}
 .ex-row{display:flex;justify-content:space-between;font-size:.72rem;}
 .et{display:block;font-size:.6rem;color:var(--sub);margin-top:1px;}
-.lazy-chart{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:10px;cursor:pointer;}
+.lazy-chart{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:10px;cursor:pointer;transition:border-color .2s;}
+.lazy-chart.open{border-color:var(--acc);}
 .lazy-title{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);display:flex;justify-content:space-between;align-items:center;}
 .lazy-hint{color:var(--acc);text-transform:none;letter-spacing:0;font-size:.62rem;}
-.lazy-chart.loaded{cursor:default;}
-.lazy-chart.loaded .chart-wrap{display:block !important;margin-top:8px;height:200px;}
+.lazy-chart .chart-wrap{margin-top:8px;height:200px;}
 .emn{color:#60a5fa;font-weight:600;font-family:'JetBrains Mono',monospace;}
 .emx{color:var(--orn);font-weight:600;font-family:'JetBrains Mono',monospace;}
 .chart-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:12px;}
 .chart-title{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin-bottom:8px;}
 .chart-wrap{position:relative;height:220px;}
-.note{font-size:.62rem;color:var(--sub);margin:10px 0;font-style:italic;}
 .pagenav{position:fixed;left:0;right:0;bottom:0;background:var(--bg2);border-top:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between;padding:10px 6px;z-index:200;}
 .pagenav-btn{background:var(--bg3);border:1px solid var(--brd);color:var(--acc);font-size:1.4rem;line-height:1;padding:8px 18px;border-radius:8px;text-decoration:none;user-select:none;}
 .pagenav-btn:active{background:#0d1f33;}
 .pagenav-label{font-size:.72rem;color:var(--sub);text-align:center;flex:1;}
 body{padding-bottom:64px;}
+
+/* Badge UV (scala OMS) */
+.uv-badge{display:inline-block;font-size:.6rem;font-weight:700;padding:1px 8px;border-radius:10px;margin-left:5px;vertical-align:middle;white-space:nowrap;}
 </style>
 </head>
 <body>
@@ -117,7 +124,7 @@ body{padding-bottom:64px;}
         <div class="card cuv">
             <div class="lbl">UV</div>
             <div class="val" id="UV">--</div>
-            <div class="unit">indice</div>
+            <div class="unit">indice <span class="uv-badge" id="uvBadge">--</span></div>
         </div>
         <div class="card cr">
             <div class="lbl">Pioggia oggi</div>
@@ -126,32 +133,35 @@ body{padding-bottom:64px;}
         </div>
     </div>
 
-    <div class="note">
-        Mappatura campi confermata: field1=Temp Aria, field2=Umidita Aria, field3=Temp Terra,
-        field4=Delta Solare (black globe), field5=WiFi RSSI, field6=Lux, field7=Pluviometro
-        (315 mm/impulso), field8=UV. Il segnale WiFi (RSSI) è mostrato in header, non tra le card
-        principali.
+    <div class="sec chart-sec">
+        <span>Grafici</span>
+        <div class="chart-toolbar">
+            <button class="ct-btn active" id="btn24h" onclick="setPeriod('24h')">24h</button>
+            <button class="ct-btn" id="btn7d" onclick="setPeriod('7d')">7 giorni</button>
+            <button class="ct-btn" id="btnmese" onclick="setPeriod('mese')">Mese</button>
+            <button class="ct-btn" id="btnanno" onclick="setPeriod('anno')">Anno</button>
+        </div>
     </div>
-
-    <div class="sec">Grafici (ultime 24h, dati grezzi)</div>
+    <div class="chart-status-line" id="chartStatus">Caricamento...</div>
     <div class="chart-box"><div class="chart-title">🌡 Temperatura (°C)</div><div class="chart-wrap"><canvas id="chartT"></canvas></div></div>
     <div class="chart-box"><div class="chart-title">💧 Umidita (%)</div><div class="chart-wrap"><canvas id="chartH"></canvas></div></div>
+    <div class="chart-box"><div class="chart-title">🌡🟤 Confronto Aria / Suolo (°C) — inerzia termica del terreno</div><div class="chart-wrap"><canvas id="chartCombo"></canvas></div></div>
 
-    <div class="sec">Altri grafici (tocca per caricare)</div>
-    <div class="lazy-chart" id="lz_TS" onclick="loadLazyChart('TS')">
-        <div class="lazy-title">🟤 Temp. suolo (°C) <span class="lazy-hint">tocca per caricare</span></div>
+    <div class="sec">Altri grafici (tocca per aprire/chiudere)</div>
+    <div class="lazy-chart" id="lz_TS" onclick="toggleLazyChart('TS')">
+        <div class="lazy-title">🟤 Temp. suolo (°C) <span class="lazy-hint">tocca per aprire</span></div>
         <div class="chart-wrap" style="display:none"><canvas id="chartTS"></canvas></div>
     </div>
-    <div class="lazy-chart" id="lz_L" onclick="loadLazyChart('L')">
-        <div class="lazy-title">☀ Radiazione (lux) <span class="lazy-hint">tocca per caricare</span></div>
+    <div class="lazy-chart" id="lz_L" onclick="toggleLazyChart('L')">
+        <div class="lazy-title">☀ Radiazione (lux) <span class="lazy-hint">tocca per aprire</span></div>
         <div class="chart-wrap" style="display:none"><canvas id="chartL"></canvas></div>
     </div>
-    <div class="lazy-chart" id="lz_BG" onclick="loadLazyChart('BG')">
-        <div class="lazy-title">🌡 Delta solare / black globe (°C) <span class="lazy-hint">tocca per caricare</span></div>
+    <div class="lazy-chart" id="lz_BG" onclick="toggleLazyChart('BG')">
+        <div class="lazy-title">🌡 Delta solare / black globe (°C) <span class="lazy-hint">tocca per aprire</span></div>
         <div class="chart-wrap" style="display:none"><canvas id="chartBG"></canvas></div>
     </div>
-    <div class="lazy-chart" id="lz_UV" onclick="loadLazyChart('UV')">
-        <div class="lazy-title">🔆 UV (indice) <span class="lazy-hint">tocca per caricare</span></div>
+    <div class="lazy-chart" id="lz_UV" onclick="toggleLazyChart('UV')">
+        <div class="lazy-title">🔆 UV (indice) <span class="lazy-hint">tocca per aprire</span></div>
         <div class="chart-wrap" style="display:none"><canvas id="chartUV"></canvas></div>
     </div>
 </div>
@@ -166,15 +176,17 @@ body{padding-bottom:64px;}
     const TS_CH_ORTO = 3358319;
     const TS_RKEY_ORTO = ''; // se il canale e' pubblico puo' restare vuoto
 
-    // Mappatura campi confermata dal firmware della stazione Orto (canale 3358319):
-    // field1=Temp Aria (SHT40), field2=Umidita Aria (SHT40), field3=Temp Terra (DS18B20),
-    // field4=Delta Solare (Black Globe), field5=WiFi RSSI, field6=Lux (VEML7700),
-    // field7=Pluviometro (315 mm/impulso), field8=UV (GUVA-S12SD).
+    // Mappatura campi (canale 3358319): field1=Temp Aria (SHT40), field2=Umidita
+    // Aria (SHT40), field3=Temp Terra (DS18B20), field4=Delta Solare (Black Globe),
+    // field5=WiFi RSSI, field6=Lux (VEML7700), field7=Pluviometro (315 mm/impulso),
+    // field8=UV (GUVA-S12SD).
     const FIELD = { temp:1, hum:2, soilTemp:3, blackGlobe:4, rssi:5, lux:6, rain:7, uv:8 };
 
     function el(id){ return document.getElementById(id); }
-    function fmt(v,d=3){ return (v===null||v===undefined||isNaN(v))?'--':Number(v).toFixed(d); }
+    // Precisione uniforme a 2 cifre decimali per tutti i valori numerici.
+    function fmt(v,d=2){ return (v===null||v===undefined||isNaN(v))?'--':Number(v).toFixed(d); }
     function tsDateToLocal(ca){ if(!ca||ca.length<16) return ''; const d=new Date(ca); const dd=String(d.getDate()).padStart(2,'0'); const mo=String(d.getMonth()+1).padStart(2,'0'); const hh=String(d.getHours()).padStart(2,'0'); const mm=String(d.getMinutes()).padStart(2,'0'); return dd+'/'+mo+' '+hh+':'+mm; }
+    function sleep(ms){ return new Promise(res=>setTimeout(res,ms)); }
     function switchTab(btn,prefix,period){
         const tabs=btn.parentElement.querySelectorAll('.ex-tab');
         tabs.forEach(t=>t.classList.remove('active'));
@@ -185,13 +197,43 @@ body{padding-bottom:64px;}
         if(target)target.classList.add('show');
     }
 
+    // Fasce UV secondo la scala standard OMS (WHO UV Index).
+    function uvInfo(uv){
+        if(isNaN(uv)) return {label:'--', bg:'rgba(139,148,158,.15)', border:'#8b949e', color:'#8b949e'};
+        if(uv<3)  return {label:'Basso',            bg:'rgba(63,185,80,.15)',  border:'#3fb950', color:'#3fb950'};
+        if(uv<6)  return {label:'Moderato',         bg:'rgba(210,153,34,.15)', border:'#d29922', color:'#d29922'};
+        if(uv<8)  return {label:'Alto',              bg:'rgba(227,179,65,.15)', border:'#e3b341', color:'#e3b341'};
+        if(uv<11) return {label:'Molto Alto',        bg:'rgba(248,81,73,.15)',  border:'#f85149', color:'#f85149'};
+        return       {label:'Estremo / Pericoloso',  bg:'rgba(167,139,250,.15)',border:'#a78bfa', color:'#a78bfa'};
+    }
+    function applyUvBadge(uv){
+        const b=el('uvBadge'); if(!b) return;
+        const info=uvInfo(uv);
+        b.textContent=info.label;
+        b.style.background=info.bg;
+        b.style.border='1px solid '+info.border;
+        b.style.color=info.color;
+    }
+
     // ─── Estremi mese/anno: risoluzione 10 min, richieste in sequenza con
-    // retry (stessa correzione fatta per Tetto e Casa: niente 8000-record cap
-    // e niente richieste perse per troppa concorrenza). ───
-    function fetchChunkRaw(start,end,aggMin,retry){
+    // retry. ThingSpeak, quando riceve richieste troppo ravvicinate, a volte
+    // risponde con HTTP 200 e feeds=[] invece di un errore vero ("fallimento
+    // silenzioso"): senza distinguerlo da "nessun dato nel periodo", un chunk
+    // intero puo' andare perso silenziosamente. Un array vuoto viene quindi
+    // ritentato come un errore, fino a 3 volte con backoff crescente — stessa
+    // correzione già applicata a Tetto e Casa. ───
+    function fetchChunkRaw(start,end,aggMin,attempt){
+        attempt = attempt || 0;
         const url='https://api.thingspeak.com/channels/'+TS_CH_ORTO+'/feeds.json?'+(TS_RKEY_ORTO?'api_key='+TS_RKEY_ORTO+'&':'')+'start='+start.toISOString()+'&end='+end.toISOString()+(aggMin?'&median='+aggMin:'');
-        return fetch(url).then(r=>r.json()).then(d=>(d&&d.feeds)?d.feeds:[]).catch(e=>{
-            if(!retry) return fetchChunkRaw(start,end,aggMin,true);
+        return fetch(url).then(r=>r.json()).then(d=>{
+            const feeds = (d && Array.isArray(d.feeds)) ? d.feeds : null;
+            if(feeds===null || feeds.length===0){
+                if(attempt<3) return sleep(800*(attempt+1)).then(()=>fetchChunkRaw(start,end,aggMin,attempt+1));
+                return [];
+            }
+            return feeds;
+        }).catch(e=>{
+            if(attempt<3) return sleep(800*(attempt+1)).then(()=>fetchChunkRaw(start,end,aggMin,attempt+1));
             console.warn('[orto chunk fallito]',start,end,e);
             return [];
         });
@@ -206,7 +248,11 @@ body{padding-bottom:64px;}
             cursor=chunkEnd;
         }
         let results=[];
-        return ranges.reduce((p,r)=>p.then(()=>fetchChunkRaw(r[0],r[1],aggMin).then(f=>{results.push(f);})),Promise.resolve())
+        // Pausa tra un chunk e l'altro per non farsi throttlare da ThingSpeak.
+        return ranges.reduce((p,r,i)=>p.then(()=>fetchChunkRaw(r[0],r[1],aggMin).then(f=>{
+            results.push(f);
+            return i<ranges.length-1 ? sleep(400) : Promise.resolve();
+        })),Promise.resolve())
             .then(()=>{
                 const merged=[].concat.apply([],results);
                 merged.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
@@ -258,11 +304,13 @@ body{padding-bottom:64px;}
             el('T').textContent = fmt(feed['field'+FIELD.temp]);
             el('H').textContent = fmt(feed['field'+FIELD.hum]);
             el('TS').textContent = fmt(feed['field'+FIELD.soilTemp]);
-            el('L').textContent = fmt(feed['field'+FIELD.lux],0);
+            el('L').textContent = fmt(feed['field'+FIELD.lux]);
             el('BG').textContent = fmt(feed['field'+FIELD.blackGlobe]);
-            el('UV').textContent = fmt(feed['field'+FIELD.uv]);
+            const uvVal = parseFloat(feed['field'+FIELD.uv]);
+            el('UV').textContent = fmt(uvVal);
+            applyUvBadge(uvVal);
             el('R').textContent = fmt(feed['field'+FIELD.rain]);
-            el('rssi').textContent = fmt(feed['field'+FIELD.rssi],0);
+            el('rssi').textContent = fmt(feed['field'+FIELD.rssi]);
             if(feed.created_at){
                 const ago = Math.round((Date.now()-new Date(feed.created_at).getTime())/60000);
                 el('updAgo').textContent = ago+' min';
@@ -281,8 +329,8 @@ body{padding-bottom:64px;}
                 return {mn:mn===Infinity?null:mn, mx:mx===-Infinity?null:mx};
             }
             const t=extremes(FIELD.temp), h=extremes(FIELD.hum);
-            if(t.mn!==null){ el('tMn').textContent='▼ '+t.mn.toFixed(3); el('tMx').textContent='▲ '+t.mx.toFixed(3); }
-            if(h.mn!==null){ el('hMn').textContent='▼ '+h.mn.toFixed(3); el('hMx').textContent='▲ '+h.mx.toFixed(3); }
+            if(t.mn!==null){ el('tMn').textContent='▼ '+t.mn.toFixed(2); el('tMx').textContent='▲ '+t.mx.toFixed(2); }
+            if(h.mn!==null){ el('hMn').textContent='▼ '+h.mn.toFixed(2); el('hMx').textContent='▲ '+h.mx.toFixed(2); }
         }).catch(e=>console.warn('[orto 24h]',e));
     }
 
@@ -291,9 +339,11 @@ body{padding-bottom:64px;}
         const ctx=el(id); if(!ctx) return;
         const opts={
             responsive:true, maintainAspectRatio:false, animation:{duration:300},
-            plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:10}, boxWidth:12, padding:8 } } },
+            interaction:{ mode:'index', intersect:false },
+            plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:10}, boxWidth:12, padding:8 } },
+                tooltip:{ callbacks:{ label:function(c){ return c.dataset.label+': '+(c.parsed.y===null?'--':c.parsed.y.toFixed(2)); } } } },
             scales:{
-                x:{ type:'time', time:{displayFormats:{hour:'HH:mm'}, tooltipFormat:'dd/MM HH:mm'}, ticks:{color:'#8b949e', font:{size:9}, maxTicksLimit:8}, grid:{color:'#1c2430'} },
+                x:{ type:'time', time:{displayFormats:{hour:'HH:mm',day:'dd/MM'}, tooltipFormat:'dd/MM HH:mm'}, ticks:{color:'#8b949e', font:{size:9}, maxTicksLimit:8}, grid:{color:'#1c2430'} },
                 y:{ ticks:{color:'#8b949e', font:{size:9}}, grid:{color:'#1c2430'}, title:{display:true, text:yLabel, color:'#8b949e', font:{size:9}} }
             }
         };
@@ -301,24 +351,47 @@ body{padding-bottom:64px;}
         charts[id]=new Chart(ctx, { type:'line', data:{datasets}, options:opts });
     }
 
+    // ─── Selettore periodo per i grafici principali (24h/7d/Mese/Anno) ───
+    let period='24h';
+    function rangeParams(p){
+        const end=new Date(); let start=new Date(); let aggMin=null, chunkDays=4, label='';
+        if(p==='24h'){ start.setHours(start.getHours()-24); aggMin=null; label='dati grezzi'; }
+        else if(p==='7d'){ start.setDate(start.getDate()-7); aggMin=10; label='media 10 min'; }
+        else if(p==='mese'){ start.setDate(start.getDate()-30); aggMin=60; label='media 60 min'; }
+        else if(p==='anno'){ start.setFullYear(start.getFullYear()-1); aggMin=720; chunkDays=30; label='media 12h'; }
+        return {start,end,aggMin,chunkDays,label};
+    }
+    function setPeriod(p){
+        period=p;
+        ['24h','7d','mese','anno'].forEach(k=>{ const b=el('btn'+k); if(b) b.classList.toggle('active',k===p); });
+        loadCharts();
+    }
     function loadCharts(){
-        const start=new Date(Date.now()-24*3600*1000).toISOString();
-        const url='https://api.thingspeak.com/channels/'+TS_CH_ORTO+'/feeds.json?'+(TS_RKEY_ORTO?'api_key='+TS_RKEY_ORTO+'&':'')+'start='+start;
-        fetch(url).then(r=>r.json()).then(data=>{
-            if(!data||!data.feeds||!data.feeds.length) return;
-            const feeds=data.feeds;
-            function series(field){ return feeds.map(f=>({x:new Date(f.created_at).getTime(), y:(f['field'+field]===null||f['field'+field]===undefined)?null:parseFloat(f['field'+field])})); }
+        const {start,end,aggMin,chunkDays,label} = rangeParams(period);
+        el('chartStatus').textContent='Caricamento...';
+        fetchRangeSeq(start,end,aggMin,chunkDays).then(feeds=>{
+            if(!feeds.length){ el('chartStatus').textContent='Nessun dato'; return; }
+            function series(field){ return feeds.map(f=>({x:new Date(f.created_at).getTime(), y:(f['field'+field]===null||f['field'+field]===undefined||f['field'+field]==='')?null:parseFloat(f['field'+field])})); }
             makeChart('chartT', [
-                { label:'Temperatura', data:series(FIELD.temp), borderColor:'#58a6ff', borderWidth:2, pointRadius:0, spanGaps:true }
+                { label:'Temperatura', data:series(FIELD.temp), borderColor:'#58a6ff', borderWidth:2, pointRadius:0, pointHoverRadius:6, pointHitRadius:14, spanGaps:true }
             ], '°C');
             makeChart('chartH', [
-                { label:'Umidita', data:series(FIELD.hum), borderColor:'#3fb950', borderWidth:2, pointRadius:0, spanGaps:true }
+                { label:'Umidita', data:series(FIELD.hum), borderColor:'#3fb950', borderWidth:2, pointRadius:0, pointHoverRadius:6, pointHitRadius:14, spanGaps:true }
             ], '%');
-        }).catch(e=>console.warn('[orto charts]',e));
+            // Grafico combinato Aria/Suolo: stessa scala, per confrontare
+            // visivamente l'inerzia termica del terreno rispetto all'aria
+            // (il suolo tende a "seguire" l'aria con ritardo e ampiezza minore).
+            makeChart('chartCombo', [
+                { label:'Temp. Aria', data:series(FIELD.temp), borderColor:'#58a6ff', borderWidth:2, pointRadius:0, pointHoverRadius:6, pointHitRadius:14, spanGaps:true },
+                { label:'Temp. Suolo', data:series(FIELD.soilTemp), borderColor:'#a3785c', borderWidth:2, pointRadius:0, pointHoverRadius:6, pointHitRadius:14, spanGaps:true }
+            ], '°C');
+            el('chartStatus').textContent='Aggiornato: '+feeds.length+' campioni · '+label;
+        }).catch(e=>{ el('chartStatus').textContent='Errore caricamento'; console.warn(e); });
     }
 
-    // ─── Grafici secondari: caricati solo al primo tocco, non al caricamento
-    // della pagina, per non appesantire inutilmente ogni apertura ───
+    // ─── Grafici secondari: veri accordion. Il primo click carica i dati (una
+    // sola volta) e apre il pannello; un click successivo lo richiude senza
+    // riscaricare nulla; riaprendolo mostra di nuovo il grafico già pronto. ───
     const LAZY_CFG = {
         TS: { field:'soilTemp', label:'Temp. suolo', color:'#a3785c', unit:'°C' },
         L:  { field:'lux',      label:'Lux',          color:'#facc15', unit:'lux' },
@@ -326,21 +399,43 @@ body{padding-bottom:64px;}
         UV: { field:'uv',       label:'UV',            color:'#c084fc', unit:'indice' }
     };
     const lazyLoaded = {};
-    function loadLazyChart(key){
-        if(lazyLoaded[key]) return;
-        lazyLoaded[key] = true;
+    const lazyOpenState = {};
+    function setLazyHint(key,text){
+        const box=el('lz_'+key); if(!box) return;
+        const hintEl = box.querySelector('.lazy-hint');
+        if(hintEl) hintEl.textContent = text;
+    }
+    function toggleLazyChart(key){
         const box = el('lz_'+key);
-        box.classList.add('loaded');
+        const wrap = box.querySelector('.chart-wrap');
+        const isOpen = !!lazyOpenState[key];
+        if(isOpen){
+            lazyOpenState[key]=false;
+            box.classList.remove('open');
+            wrap.style.display='none';
+            setLazyHint(key,'tocca per aprire');
+            return;
+        }
+        lazyOpenState[key]=true;
+        box.classList.add('open');
+        wrap.style.display='block';
+        if(lazyLoaded[key]){
+            setLazyHint(key,'tocca per chiudere');
+            return;
+        }
+        lazyLoaded[key]=true;
+        setLazyHint(key,'caricamento...');
         const cfg = LAZY_CFG[key];
         const start=new Date(Date.now()-24*3600*1000).toISOString();
         const url='https://api.thingspeak.com/channels/'+TS_CH_ORTO+'/feeds.json?'+(TS_RKEY_ORTO?'api_key='+TS_RKEY_ORTO+'&':'')+'start='+start;
         fetch(url).then(r=>r.json()).then(data=>{
-            if(!data||!data.feeds||!data.feeds.length) return;
+            if(!data||!data.feeds||!data.feeds.length){ setLazyHint(key,'nessun dato'); return; }
             const feeds=data.feeds;
             const fieldNum=FIELD[cfg.field];
-            const series=feeds.map(f=>({x:new Date(f.created_at).getTime(), y:(f['field'+fieldNum]===null||f['field'+fieldNum]===undefined)?null:parseFloat(f['field'+fieldNum])}));
-            makeChart('chart'+key, [{ label:cfg.label, data:series, borderColor:cfg.color, borderWidth:2, pointRadius:0, spanGaps:true }], cfg.unit);
-        }).catch(e=>console.warn('[orto lazy '+key+']',e));
+            const series=feeds.map(f=>({x:new Date(f.created_at).getTime(), y:(f['field'+fieldNum]===null||f['field'+fieldNum]===undefined||f['field'+fieldNum]==='')?null:parseFloat(f['field'+fieldNum])}));
+            makeChart('chart'+key, [{ label:cfg.label, data:series, borderColor:cfg.color, borderWidth:2, pointRadius:0, pointHoverRadius:6, pointHitRadius:14, spanGaps:true }], cfg.unit);
+            setLazyHint(key,'tocca per chiudere');
+        }).catch(e=>{ console.warn('[orto lazy '+key+']',e); setLazyHint(key,'errore, riprova'); lazyLoaded[key]=false; });
     }
 
     fetchLive(); fetchExtremes24h(); loadCharts();
