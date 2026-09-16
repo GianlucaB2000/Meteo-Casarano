@@ -336,8 +336,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     // Ordine di valutazione: CALDO AFA > UMIDO/AFOSO > FREDDO > SECCO > OTTIMALE > Nella norma
     function combinedComfort(t,rh,hx){
         if(isNaN(t)||isNaN(rh)) return {label:'--', cls:''};
-        if(t>COMFORT_T_MAX+1.5 || (!isNaN(hx) && hx>=34)) return {label:'Caldo Afa', cls:'combo-caldo'};
-        if(t>=COMFORT_T_MAX-2 && t<=COMFORT_T_MAX+1.5 && rh>COMFORT_RH_MAX) return {label:'Umido / Afoso', cls:'combo-afoso'};
+        // Soglia allineata ESATTAMENTE a quella del quadrante (COMFORT_T_MAX),
+        // così il badge non può più dire "Nella norma" mentre il quadrante è già rosso.
+        if(t>COMFORT_T_MAX || (!isNaN(hx) && hx>=34)) return {label:'Caldo Afa', cls:'combo-caldo'};
+        if(t>=COMFORT_T_MAX-2 && t<=COMFORT_T_MAX && rh>COMFORT_RH_MAX) return {label:'Umido / Afoso', cls:'combo-afoso'};
         if(t<COMFORT_T_MIN) return {label:'Freddo', cls:'combo-freddo'};
         if(rh<COMFORT_RH_MIN) return {label:'Secco', cls:'combo-secco'};
         if(t>=COMFORT_T_MIN+1 && t<=COMFORT_T_MAX-2 && rh>=COMFORT_RH_MIN+5 && rh<=COMFORT_RH_MAX) return {label:'Si Sta Bene', cls:'combo-ottimale'};
@@ -666,13 +668,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         loadCharts(period);
     }
     // ─── Tab/pulsante dedicato per il grafico del delta termico Casa-Tetto ───
-    // Indipendente dal toggle "Sovrapponi Tetto": mostra/nasconde il riquadro
-    // del grafico delta e, se necessario, scarica i dati del Tetto per calcolarlo.
     function toggleDeltaChart(){
         deltaChartOn = !deltaChartOn;
         el('btnDelta').classList.toggle('active', deltaChartOn);
         el('deltaChartBox').style.display = deltaChartOn ? '' : 'none';
-        if(deltaChartOn) loadDeltaChart();
+        // Se i dati Casa per il periodo corrente sono già stati scaricati
+        // (lastCasaFeeds), li riuso invece di rifare la stessa richiesta.
+        if(deltaChartOn) loadDeltaChart(lastCasaFeeds.length ? lastCasaFeeds : undefined);
     }
     function rangeParams(p){
         const end=new Date(); let start=new Date(); let aggMin=null, chunkDays=4;
@@ -742,9 +744,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             return {x:new Date(f.created_at).getTime(), y: (hx===null||isNaN(hx))?null:Number(hx.toFixed(2))};
         });
     }
-    // ─── Allineamento per timestamp più vicino: Casa e Tetto non campionano
-    // esattamente allo stesso istante, quindi per ogni punto Casa cerco il
-    // punto Tetto più vicino nel tempo (entro una tolleranza), altrimenti scarto. ───
     function alignByTimestamp(feedsA, fieldA, feedsB, fieldB, toleranceMs){
         const bPoints = feedsB.map(f=>({t:new Date(f.created_at).getTime(), v:parseFloat(f['field'+fieldB])})).filter(p=>!isNaN(p.v));
         bPoints.sort((a,b)=>a.t-b.t);
@@ -769,20 +768,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         });
         return out;
     }
-    function loadDeltaChart(){
+    // Accetta opzionalmente i dati Casa già scaricati (es. da loadCharts, che
+    // li ha appena presi per il grafico Temperatura): evita di riscaricarli
+    // una seconda volta identici quando il grafico Delta è aperto e si
+    // cambia periodo — prima venivano scaricati due volte.
+    function loadDeltaChart(casaFeedsParam){
         const {start,end,aggMin,chunkDays} = rangeParams(period);
         el('chartStatus').textContent='Caricamento delta...';
+        const casaPromise = casaFeedsParam ? Promise.resolve(casaFeedsParam) : fetchRangeSeq(start,end,aggMin,chunkDays);
         Promise.all([
-            fetchRangeSeq(start,end,aggMin,chunkDays),
+            casaPromise,
             fetchTettoRange(start,end,aggMin,chunkDays)
         ]).then(([casaFeeds,tettoFeeds])=>{
             if(!casaFeeds.length || !tettoFeeds.length){ el('chartStatus').textContent='Nessun dato per il delta'; return; }
-            // Tolleranza di allineamento più larga per periodi lunghi (meno campioni ravvicinati)
             const tolMs = (period==='24h') ? 15*60000 : (period==='anno' ? 24*3600000 : 3*3600000);
-            const tRaw = casaFeeds.map(f=>(f['field'+FIELD.temp]===null||f['field'+FIELD.temp]===undefined||f['field'+FIELD.temp]==='')?null:parseFloat(f['field'+FIELD.temp]));
-            const tClean = despike(tRaw, 2.5);
-            const casaFeedsClean = casaFeeds.map((f,i)=>Object.assign({},f,{['field'+FIELD.temp]: tClean[i]===null?'':tClean[i]}));
-            const deltaData = alignByTimestamp(casaFeedsClean, FIELD.temp, tettoFeeds, FIELD.temp, tolMs);
+            // Despike simmetrico su ENTRAMBE le serie prima del confronto: un
+            // singolo glitch del sensore Tetto (prima non filtrato qui) finiva
+            // dritto nel grafico delta come un falso picco.
+            const tRawCasa = casaFeeds.map(f=>(f['field'+FIELD.temp]===null||f['field'+FIELD.temp]===undefined||f['field'+FIELD.temp]==='')?null:parseFloat(f['field'+FIELD.temp]));
+            const tCleanCasa = despike(tRawCasa, 2.5);
+            const casaFeedsClean = casaFeeds.map((f,i)=>Object.assign({},f,{['field'+FIELD.temp]: tCleanCasa[i]===null?'':tCleanCasa[i]}));
+            const tRawTetto = tettoFeeds.map(f=>(f.field1===null||f.field1===undefined||f.field1==='')?null:parseFloat(f.field1));
+            const tCleanTetto = despike(tRawTetto, 2.5);
+            const tettoFeedsClean = tettoFeeds.map((f,i)=>Object.assign({},f,{field1: tCleanTetto[i]===null?'':tCleanTetto[i]}));
+            const deltaData = alignByTimestamp(casaFeedsClean, FIELD.temp, tettoFeedsClean, 1, tolMs);
             makeChart('chartDelta',[{
                 label:'Delta Casa - Tetto',
                 data:deltaData,
@@ -825,8 +834,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             } else {
                 makeChart('chartT',tempDatasets,'°C');
             }
-            // Se il grafico delta è già aperto, aggiornalo insieme al resto quando cambia periodo
-            if(deltaChartOn) loadDeltaChart();
+            // Passo i dati Casa già scaricati, cosi' loadDeltaChart non li rifetcha.
+            if(deltaChartOn) loadDeltaChart(feeds);
         }).catch(e=>{ el('chartStatus').textContent='Errore caricamento'; console.warn(e); });
     }
     function makeChart(id,datasets,yLabel,extraScales){
