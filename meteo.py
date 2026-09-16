@@ -107,7 +107,59 @@ def eta_minuti(feed):
         return None
 
 
+# ==========================================================
+# ZAMBRETTI — STESSA LOGICA DELL'ESP
+# ==========================================================
+
+ZAM_TABLE = [
+    None,
+    "A", "B", "D", "H", "O", "R", "U", "V", "X",
+    "A", "B", "E", "K", "N", "P", "S", "W", "X", "Z",
+    "A", "B", "C", "F", "G", "I", "J", "L", "M", "Q",
+    "T", "Y", "Z"
+]
+
+
+ZAM_DESCR = [
+    "Bello e stabile",
+    "Bello",
+    "In miglioramento",
+    "Bello ma variabile",
+    "Bello, possibili rovesci",
+    "Abbastanza bello, in migl.",
+    "Abbastanza bello, variabile",
+    "Abbastanza bello, poi piogge",
+    "Rovesci presto, poi migl.",
+    "Variabile, in miglioramento",
+    "Abbastanza bello, rovesci prob.",
+    "Instabile, poi sereno",
+    "Instabile, prob. miglioramento",
+    "Rovesci con schiarite",
+    "Rovesci, peggioramento",
+    "Variabile, qualche pioggia",
+    "Instabile, schiarite brevi",
+    "Instabile, pioggia dopo",
+    "Instabile, piogge",
+    "Molto instabile, schiarite",
+    "Piogge, peggioramento",
+    "Piogge, molto instabile",
+    "Piogge frequenti",
+    "Molto instabile, pioggia",
+    "Burrasca, poss. miglioramento",
+    "Burrasca e piogge"
+]
+
+
 def pressione_tre_ore(feeds):
+    """
+    Calcola il trend barometrico su 3 ore usando
+    i timestamp reali di ThingSpeak.
+
+    Restituisce:
+        delta hPa/3h
+        descrizione trend
+    """
+
     punti = []
 
     for feed in feeds:
@@ -115,6 +167,9 @@ def pressione_tre_ore(feeds):
         timestamp = feed.get("created_at")
 
         if pressione is None or not timestamp:
+            continue
+
+        if pressione <= 800 or pressione >= 1100:
             continue
 
         try:
@@ -130,99 +185,128 @@ def pressione_tre_ore(feeds):
     if len(punti) < 2:
         return None, None
 
-    punti.sort()
+    punti.sort(key=lambda x: x[0])
 
     ultimo_tempo, ultima_pressione = punti[-1]
 
-    target = ultimo_tempo.timestamp() - 3 * 3600
+    target = ultimo_tempo.timestamp() - (3 * 3600)
+
+    precedenti = [
+        punto for punto in punti[:-1]
+        if punto[0].timestamp() <= ultimo_tempo.timestamp()
+    ]
+
+    if not precedenti:
+        return None, None
 
     precedente = min(
-        punti[:-1],
+        precedenti,
         key=lambda x: abs(
             x[0].timestamp() - target
         )
     )
 
-    delta = ultima_pressione - precedente[1]
+    delta_tempo = (
+        ultimo_tempo - precedente[0]
+    ).total_seconds()
 
-    if delta <= -1.6:
-        trend = "IN CALO"
+    if delta_tempo <= 0:
+        return None, None
 
-    elif delta >= 1.6:
-        trend = "IN AUMENTO"
+    # Normalizzazione a hPa/3h,
+    # come richiesto dalla logica Zambretti dell'ESP.
+    delta_pressione = (
+        ultima_pressione - precedente[1]
+    ) * (3 * 3600 / delta_tempo)
+
+    if delta_pressione > 1.6:
+        trend = "IN SALITA"
+
+    elif delta_pressione < -1.6:
+        trend = "IN DISCESA"
 
     else:
         trend = "STABILE"
 
-    return delta, trend
+    return delta_pressione, trend
 
 
-ZAMBRETTI = {
-    1: "Stabile, bel tempo",
-    2: "Bel tempo",
-    3: "Bel tempo, in peggioramento",
-    4: "Bel tempo, possibile peggioramento",
-    5: "Bel tempo, possibili rovesci",
-    6: "Abbastanza bello, miglioramento",
-    7: "Abbastanza bello, possibili rovesci",
-    8: "Abbastanza bello, pioggia più tardi",
-    9: "Rovesci iniziali, miglioramento",
-    10: "Variabile, in miglioramento",
-    11: "Abbastanza bello, rovesci probabili",
-    12: "Piuttosto instabile, miglioramento più tardi",
-    13: "Instabile, probabilmente in miglioramento",
-    14: "Rovesci, schiarite",
-    15: "Rovesci, in peggioramento",
-    16: "Variabile, qualche pioggia",
-    17: "Instabile, pioggia a tratti",
-    18: "Instabile, pioggia",
-    19: "Instabile, pioggia a tratti, peggioramento",
-    20: "Pioggia a tratti, molto instabile",
-    21: "Pioggia a tratti, forte",
-    22: "Pioggia, a tratti intensa",
-    23: "Temporalesco, possibile miglioramento",
-    24: "Temporalesco, molta pioggia",
-    25: "Temporalesco",
-    26: "Temporalesco, possibile miglioramento"
-}
+def calcola_zambretti(pressione, delta_3h):
+    """
+    Replica calcZambrettiIndex() dell'ESP.
 
+    p      = pressione al livello del mare
+    trend  = hPa/3h
+    mese   = mese locale corrente
+    """
 
-def calcola_zambretti(pressione, delta_3h, direzione=None):
     if pressione is None or delta_3h is None:
-        return None, "Dati insufficienti"
+        return None, None, "Dati insufficienti"
 
-    if delta_3h <= -1.6:
-        z = 127 - 0.12 * pressione
-        trend = "in calo"
+    if pressione <= 800 or pressione >= 1100:
+        return None, None, "Pressione fuori scala"
 
-    elif delta_3h >= 1.6:
-        z = 185 - 0.16 * pressione
-        trend = "in aumento"
+    mese = datetime.now(TZ_LOCALE).month
+
+    # Correzione base dell'ESP
+    pc = pressione + 10
+
+    # Correzione stagionale maggio-settembre
+    if 5 <= mese <= 9:
+        pc += 5
+
+    # Pressione in decimi di hPa, arrotondata
+    P = int(pc * 10 + 0.5)
+
+    estate = 6 <= mese <= 8
+    inverno = mese == 12 or mese <= 2
+
+    if delta_3h > 1.6:
+
+        # Pressione in salita
+        z = 179 - (2 * P) // 129
+
+        if estate:
+            z -= 1
+
+        if inverno:
+            z += 1
+
+        z = max(20, min(32, z))
+
+        trend = "IN SALITA"
+
+    elif delta_3h < -1.6:
+
+        # Pressione in discesa
+        z = 130 - P // 81
+
+        if estate:
+            z += 1
+
+        if inverno:
+            z -= 1
+
+        z = max(1, min(9, z))
+
+        trend = "IN DISCESA"
 
     else:
-        z = 144 - 0.13 * pressione
-        trend = "stabile"
 
-    if direzione is not None:
-        try:
-            d = float(direzione)
+        # Pressione stabile
+        z = 147 - (5 * P) // 376
 
-            if 157.5 <= d < 202.5:
-                z += 2
+        z = max(10, min(19, z))
 
-            elif (
-                67.5 <= d < 112.5
-                or 247.5 <= d < 292.5
-            ):
-                z += 1
+        trend = "STABILE"
 
-        except (ValueError, TypeError):
-            pass
+    lettera = ZAM_TABLE[z]
 
-    z = int(round(z))
-    z = max(1, min(26, z))
+    descrizione = ZAM_DESCR[
+        ord(lettera) - ord("A")
+    ]
 
-    return z, trend
+    return z, lettera, descrizione
 
 
 print()
@@ -274,20 +358,9 @@ light_now = valore(ultimo_tetto, "field7")
 delta_pressione, trend_pressione = pressione_tre_ore(tetto)
 
 
-z_numero, z_trend = calcola_zambretti(
+z_numero, z_lettera, z_testo = calcola_zambretti(
     press_now,
-    delta_pressione,
-    dir_now
-)
-
-
-z_testo = (
-    ZAMBRETTI.get(
-        z_numero,
-        "Previsione non disponibile"
-    )
-    if z_numero is not None
-    else None
+    delta_pressione
 )
 
 
@@ -563,7 +636,8 @@ if (
 
     if z_numero is not None:
         testo += (
-            f"Zambretti: {z_numero} — "
+            f"Zambretti: {z_lettera} "
+            f"(indice {z_numero}) — "
             f"{z_testo}\n"
         )
 
