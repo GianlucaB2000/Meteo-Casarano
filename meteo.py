@@ -11,7 +11,7 @@ CASA_CHANNEL = 3211426
 TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN")
 TG_CHAT_ID = os.environ.get("TG_CHAT_ID")
 
-DATA_TEST_REPORT = "2026-09-15"
+DATA_TEST_REPORT = "2026-09-16"
 TZ_LOCALE = ZoneInfo("Europe/Rome")
 
 def invia_telegram(testo):
