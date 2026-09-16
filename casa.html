@@ -39,7 +39,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .hero{grid-column:1/-1;border-color:var(--acc);padding:16px;}
 .hero-val{font-size:1.3rem;font-weight:700;color:var(--val);font-family:'JetBrains Mono',monospace;}
 .note{font-size:.62rem;color:var(--sub);margin:0;font-style:italic;line-height:1.5;}
-.chart-toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;}
+.chart-toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.chart-sec{flex-wrap:wrap;row-gap:8px;}
+.chart-status-line{font-size:.6rem;color:var(--sub);margin:0 0 8px 2px;}
 .ct-btn{background:var(--bg3);border:1px solid var(--brd);color:var(--sub);font-size:.68rem;padding:6px 11px;border-radius:8px;cursor:pointer;}
 .ct-btn.active{color:var(--acc);border-color:var(--acc);}
 .chart-grid{display:grid;gap:10px;grid-template-columns:1fr;}
@@ -71,8 +73,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .gauge-cap{font-size:.6rem;color:var(--sub);text-transform:uppercase;letter-spacing:.07em;margin-top:2px;}
 .gauge-num{font-size:.95rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--val);margin-top:-4px;}
 .gauge-value{font-size:1.05rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--val);margin-top:2px;}
-.gauge-note{font-size:.6rem;color:var(--sub);text-align:center;margin-top:10px;line-height:1.5;}
-.gauge-note.warn{color:var(--red);font-weight:600;}
+.gauge-note{font-size:.68rem;text-align:center;line-height:1.5;}
+.gauge-note.warn{margin-top:10px;color:var(--red);font-weight:600;background:rgba(248,81,73,.12);border:1px solid var(--red);border-radius:8px;padding:8px 10px;}
 .needle-main, .needle-second{transition:transform .5s ease-out;}
 .gauge-combined{display:flex;justify-content:center;margin-top:4px;}
 .combo-badge{font-size:.72rem;font-weight:700;letter-spacing:.03em;padding:6px 16px;border-radius:20px;text-transform:uppercase;}
@@ -83,13 +85,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .combo-caldo{background:rgba(248,81,73,.15);color:var(--red);border:1px solid var(--red);}
 
 /* Legenda soglie sotto i quadranti */
-.gauge-legend{display:flex;flex-wrap:wrap;gap:10px 18px;justify-content:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--brd);}
-.gl-item{display:flex;align-items:center;gap:6px;font-size:.62rem;color:var(--sub);}
-.gl-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
-.gl-dot.blue{background:var(--acc);}
-.gl-dot.green{background:var(--grn);}
-.gl-dot.red{background:var(--red);}
-.gl-dot.orange{background:var(--ylw);}
 
 /* Derived metrics grid */
 .mini-grid{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-top:2px;}
@@ -136,15 +131,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         <div class="gauge-combined">
             <span class="combo-badge" id="comboBadge">--</span>
         </div>
-        <div class="gauge-note" id="gaugeHumidexNote"></div>
-        <div class="gauge-legend">
-            <span class="gl-item"><span class="gl-dot blue"></span>Temp &lt; 19°C = freddo</span>
-            <span class="gl-item"><span class="gl-dot green"></span>Temp 19–26.5°C = confort</span>
-            <span class="gl-item"><span class="gl-dot red"></span>Temp &gt; 26.5°C = caldo</span>
-            <span class="gl-item"><span class="gl-dot orange"></span>Umidità &lt; 35% = secca</span>
-            <span class="gl-item"><span class="gl-dot green"></span>Umidità 35–60% = confort</span>
-            <span class="gl-item"><span class="gl-dot red"></span>Umidità &gt; 60% = afosa</span>
-        </div>
+        <div class="gauge-note" id="gaugeHumidexNote" style="display:none;"></div>
     </div>
 
     <div class="sec">Ultimo rilievo</div>
@@ -210,11 +197,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
             <div class="mini-val" id="humidex">--</div>
             <div class="mini-unit">°C</div>
         </div>
-        <div class="mini-card">
-            <div class="mini-lbl">Comfort termico</div>
-            <div class="mini-val" style="font-size:.85rem;" id="comfortLabel">--</div>
-            <div class="mini-unit">indice combinato T+UR</div>
-        </div>
     </div>
 
     <div class="sec">Confronto con il Tetto (esterno)</div>
@@ -225,26 +207,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         </div>
     </div>
 
-    <div class="sec">
+    <div class="sec chart-sec">
         <span class="sec-l">Grafici</span>
-        <div class="info-wrap">
-            <div class="info-icon" onclick="toggleInfo()">i</div>
-            <div class="info-pop" id="infoPop">
-                Canale ThingSpeak 3211426: field1=Temperatura, field2=Umidità, field3=Pressione raw (stazione),
-                field5=Pressione a livello del mare. Estremi mese/anno calcolati a risoluzione 10 min
-                (stessa del Tetto) per essere confrontabili tra loro.
+        <div class="chart-toolbar">
+            <button class="ct-btn active" id="btn24h" onclick="setPeriod('24h')">24h</button>
+            <button class="ct-btn" id="btn7d" onclick="setPeriod('7d')">7 giorni</button>
+            <button class="ct-btn" id="btn30d" onclick="setPeriod('30d')">30 giorni</button>
+            <button class="ct-btn" id="btnAnno" onclick="setPeriod('anno')">Anno</button>
+            <label class="overlay-toggle"><input type="checkbox" id="overlayToggle" onchange="onOverlayToggle()">Sovrapponi Tetto</label>
+            <button class="ct-btn" id="btnDelta" onclick="toggleDeltaChart()">📊 Delta Casa-Tetto</button>
+            <div class="info-wrap">
+                <div class="info-icon" onclick="toggleInfo()">i</div>
+                <div class="info-pop" id="infoPop">
+                    Canale ThingSpeak 3211426: field1=Temperatura, field2=Umidità, field3=Pressione raw (stazione),
+                    field5=Pressione a livello del mare. Estremi mese/anno calcolati a risoluzione 10 min
+                    (stessa del Tetto) per essere confrontabili tra loro.
+                </div>
             </div>
         </div>
     </div>
-    <div class="chart-toolbar">
-        <button class="ct-btn active" id="btn24h" onclick="setPeriod('24h')">24h</button>
-        <button class="ct-btn" id="btn7d" onclick="setPeriod('7d')">7 giorni</button>
-        <button class="ct-btn" id="btn30d" onclick="setPeriod('30d')">30 giorni</button>
-        <button class="ct-btn" id="btnAnno" onclick="setPeriod('anno')">Anno</button>
-        <label class="overlay-toggle"><input type="checkbox" id="overlayToggle" onchange="onOverlayToggle()">Sovrapponi Tetto (inerzia termica)</label>
-        <button class="ct-btn" id="btnDelta" onclick="toggleDeltaChart()">📊 Delta Casa-Tetto</button>
-        <span style="font-size:.6rem;color:var(--sub);margin-left:4px;" id="chartStatus">Caricamento...</span>
-    </div>
+    <div class="chart-status-line" id="chartStatus">Caricamento...</div>
     <div class="chart-grid">
         <div class="chart-box"><div class="chart-title">🌡 Temperatura (°C)</div><div class="chart-wrap"><canvas id="chartT"></canvas></div></div>
         <div class="chart-box"><div class="chart-title">🥵 Temperatura Percepita — Humidex (°C)</div><div class="chart-wrap"><canvas id="chartHx"></canvas></div></div>
@@ -381,7 +363,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         el('dewPoint').textContent=fmt(dp);
         el('absHum').textContent=fmt(ah);
         el('humidex').textContent=fmt(hx);
-        el('comfortLabel').textContent=combo.label;
         applyBadge('badgeTemp', tempBadge(t));
         applyBadge('badgeHum', humBadge(rh));
         // Bordo card dinamico
@@ -422,6 +403,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         zones.forEach(z=>{
             const a1=valToAngle(z.from,min,max), a2=valToAngle(z.to,min,max);
             svg += '<path d="'+arcPath(cx,cy,r,a1,a2)+'" stroke="'+z.color+'" stroke-width="14" fill="none" stroke-linecap="butt"/>';
+            // Etichetta di stato dentro il settore colorato (al centro dell'arco),
+            // con un contorno scuro (stroke) per restare leggibile su ogni colore.
+            if(z.label){
+                const mid=(a1+a2)/2;
+                const p=polar(cx,cy,r,mid);
+                svg += '<text x="'+p.x+'" y="'+p.y+'" font-size="7" font-weight="700" fill="#ffffff" stroke="#0d1117" stroke-width="2.2" paint-order="stroke" text-anchor="middle" dominant-baseline="middle">'+z.label+'</text>';
+            }
         });
         svg += '<text x="'+(cx-r-2)+'" y="'+(cy+16)+'" font-size="9" fill="#8b949e">'+min+'</text>';
         svg += '<text x="'+(cx+r-10)+'" y="'+(cy+16)+'" font-size="9" fill="#8b949e">'+max+'</text>';
@@ -432,14 +420,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     let gaugesInit=false;
     function initGauges(){
         const tempZones=[
-            {from:-10,to:COMFORT_T_MIN,color:'#58a6ff'},
-            {from:COMFORT_T_MIN,to:COMFORT_T_MAX,color:'#3fb950'},
-            {from:COMFORT_T_MAX,to:40,color:'#f85149'}
+            {from:-10,to:COMFORT_T_MIN,color:'#58a6ff',label:'Freddo'},
+            {from:COMFORT_T_MIN,to:COMFORT_T_MAX,color:'#3fb950',label:'Comfort'},
+            {from:COMFORT_T_MAX,to:40,color:'#f85149',label:'Caldo'}
         ];
         const humZones=[
-            {from:0,to:COMFORT_RH_MIN,color:'#d29922'},
-            {from:COMFORT_RH_MIN,to:COMFORT_RH_MAX,color:'#3fb950'},
-            {from:COMFORT_RH_MAX,to:100,color:'#f85149'}
+            {from:0,to:COMFORT_RH_MIN,color:'#d29922',label:'Secca'},
+            {from:COMFORT_RH_MIN,to:COMFORT_RH_MAX,color:'#3fb950',label:'Comfort'},
+            {from:COMFORT_RH_MAX,to:100,color:'#f85149',label:'Afosa'}
         ];
         let tSvg = buildGaugeSkeleton(-10,40,tempZones);
         tSvg = tSvg.replace('__NEEDLE1__','needleTempMain');
@@ -459,13 +447,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         if(!isNaN(rh)) setNeedle('needleHumMain', angleToRotate(valToAngle(rh,0,100)));
         el('gaugeTempValue').textContent = fmt(t)+' °C';
         el('gaugeHumValue').textContent = fmt(rh)+' %';
+        // Banner dinamico: compare SOLO quando l'Humidex supera i 35°C
+        // (fascia "Percepibile" e oltre), altrimenti resta nascosto del tutto.
         const noteEl = el('gaugeHumidexNote');
-        if(!isNaN(hx) && hx>40){
-            noteEl.textContent = '⚠ Humidex '+fmt(hx)+'°C — Estremo Disagio / Rischio Colpo di Calore (soglia: >40°C)';
+        if(!isNaN(hx) && hx>35){
+            const estremo = hx>=40;
+            noteEl.textContent = '⚠ Humidex '+fmt(hx)+'°C — '+(estremo
+                ? 'Estremo Disagio / Rischio Colpo di Calore (soglia: >40°C)'
+                : 'Disagio percepibile per l\'afa (soglia estrema: >40°C)');
             noteEl.className = 'gauge-note warn';
+            noteEl.style.display = '';
         } else {
-            noteEl.textContent = 'Humidex oltre 40°C indica fascia di Estremo Disagio / Rischio Colpo di Calore.';
-            noteEl.className = 'gauge-note';
+            noteEl.style.display = 'none';
         }
     }
 
