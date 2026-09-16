@@ -1,6 +1,5 @@
 import os
 import requests
-from statistics import mean
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -153,10 +152,8 @@ delta = ultima_pressione - precedente[1]
 
 if delta <= -1.6:
     trend = "IN CALO"
-
 elif delta >= 1.6:
     trend = "IN AUMENTO"
-
 else:
     trend = "STABILE"
 
@@ -193,11 +190,10 @@ ZAMBRETTI = {
 }
 
 def calcola_zambretti(pressione, delta_3h, direzione=None):
+if pressione is None or delta_3h is None:
+return None, "Dati insufficienti"
 
 ```
-if pressione is None or delta_3h is None:
-    return None, "Dati insufficienti"
-
 if delta_3h <= -1.6:
     z = 127 - 0.12 * pressione
     trend = "in calo"
@@ -211,7 +207,6 @@ else:
     trend = "stabile"
 
 if direzione is not None:
-
     try:
         d = float(direzione)
 
@@ -228,7 +223,6 @@ if direzione is not None:
         pass
 
 z = int(round(z))
-
 z = max(1, min(26, z))
 
 return z, trend
@@ -251,13 +245,12 @@ print("Leggo Tetto...")
 tetto = leggi_canale(TETTO_CHANNEL)
 
 if not tetto:
-
-```
 invia_telegram(
-    "🚨 ALERT METEO CASARANO\n\n"
-    "Nessun dato ricevuto dal TETTO."
+"🚨 ALERT METEO CASARANO\n\n"
+"Nessun dato ricevuto dal TETTO."
 )
 
+```
 raise RuntimeError("Nessun dato Tetto")
 ```
 
@@ -307,18 +300,11 @@ else None
 print("Leggo Orto...")
 
 try:
-
-```
 orto = leggi_canale(ORTO_CHANNEL)
-```
 
 except Exception as e:
-
-```
 print("Errore lettura Orto:", e)
-
 orto = []
-```
 
 print("Orto - letture 24h:", len(orto))
 
@@ -347,26 +333,19 @@ o_uv_now = valore(ultimo_orto, "field8")
 print("Leggo Casa...")
 
 try:
-
-```
 casa = leggi_canale(CASA_CHANNEL)
-```
 
 except Exception as e:
-
-```
 print("Errore lettura Casa:", e)
-
 casa = []
-```
 
 print("Casa - letture 24h:", len(casa))
 
-# CASA:
+# Casa:
 
 # field1 = temperatura
 
-# field2 = umidità
+# field2 = umidita
 
 #
 
@@ -384,7 +363,7 @@ c_hum_now = valore(ultimo_casa, "field2")
 
 # ==========================================================
 
-# ETA' AGGIORNAMENTI
+# ETA AGGIORNAMENTI
 
 # ==========================================================
 
@@ -392,31 +371,22 @@ eta_tetto = eta_minuti(ultimo_tetto)
 eta_orto = eta_minuti(ultimo_orto)
 eta_casa = eta_minuti(ultimo_casa)
 
-print("Età Tetto:", eta_tetto)
-print("Età Orto:", eta_orto)
-print("Età Casa:", eta_casa)
+print("Eta Tetto:", eta_tetto)
+print("Eta Orto:", eta_orto)
+print("Eta Casa:", eta_casa)
 
 # ==========================================================
 
-# CONTROLLO TETTO OFFLINE
+# CONTROLLO TETTO
 
 # ==========================================================
 
 if eta_tetto is not None and eta_tetto > 10:
-
-```
 invia_telegram(
-    "🚨 ALERT METEO CASARANO\n\n"
-    f"Tetto senza aggiornamenti da "
-    f"{eta_tetto:.0f} minuti."
+"🚨 ALERT METEO CASARANO\n\n"
+f"Tetto senza aggiornamenti da "
+f"{eta_tetto:.0f} minuti."
 )
-```
-
-# ==========================================================
-
-# CONTROLLO DATI TETTO MANCANTI
-
-# ==========================================================
 
 mancanti = []
 
@@ -424,20 +394,17 @@ if ultimo_tetto.get("field1") is None:
 mancanti.append("temperatura")
 
 if ultimo_tetto.get("field2") is None:
-mancanti.append("umidità")
+mancanti.append("umidita")
 
 if ultimo_tetto.get("field3") is None:
 mancanti.append("pressione")
 
 if mancanti:
-
-```
 invia_telegram(
-    "🚨 ALERT METEO CASARANO\n\n"
-    "Dati mancanti Tetto: "
-    + ", ".join(mancanti)
+"🚨 ALERT METEO CASARANO\n\n"
+"Dati mancanti Tetto: "
++ ", ".join(mancanti)
 )
-```
 
 # ==========================================================
 
@@ -446,14 +413,11 @@ invia_telegram(
 # ==========================================================
 
 if eta_casa is not None and eta_casa > 10:
-
-```
 invia_telegram(
-    "🚨 ALERT METEO CASARANO\n\n"
-    f"Stazione CASA senza aggiornamenti da "
-    f"{eta_casa:.0f} minuti."
+"🚨 ALERT METEO CASARANO\n\n"
+f"Stazione CASA senza aggiornamenti da "
+f"{eta_casa:.0f} minuti."
 )
-```
 
 mancanti_casa = []
 
@@ -464,18 +428,15 @@ if ultimo_casa.get("field1") is None:
     mancanti_casa.append("temperatura")
 
 if ultimo_casa.get("field2") is None:
-    mancanti_casa.append("umidità")
+    mancanti_casa.append("umidita")
 ```
 
 if mancanti_casa:
-
-```
 invia_telegram(
-    "🚨 ALERT METEO CASARANO\n\n"
-    "Dati mancanti CASA: "
-    + ", ".join(mancanti_casa)
+"🚨 ALERT METEO CASARANO\n\n"
+"Dati mancanti CASA: "
++ ", ".join(mancanti_casa)
 )
-```
 
 # ==========================================================
 
@@ -486,7 +447,6 @@ invia_telegram(
 adesso_locale = datetime.now(TZ_LOCALE)
 
 data_locale = adesso_locale.strftime("%Y-%m-%d")
-
 minuto_locale = adesso_locale.minute
 
 if (
@@ -501,9 +461,7 @@ testo = (
 )
 
 
-# ------------------------------------------------------
 # TETTO
-# ------------------------------------------------------
 
 testo += "🏠 TETTO\n"
 
@@ -511,7 +469,7 @@ if temp_now is not None:
     testo += f"Temperatura: {temp_now:.1f} °C\n"
 
 if hum_now is not None:
-    testo += f"Umidità: {hum_now:.1f} %\n"
+    testo += f"Umidita: {hum_now:.1f} %\n"
 
 if press_now is not None:
     testo += f"Pressione: {press_now:.1f} hPa\n"
@@ -531,12 +489,9 @@ if light_now is not None:
 testo += "\n"
 
 
-# ------------------------------------------------------
-# ESTREMI TETTO 24H
-# ------------------------------------------------------
+# ESTREMI TETTO
 
 if t_temp:
-
     testo += (
         f"Temp. 24h: "
         f"{min(t_temp):.1f} / "
@@ -544,15 +499,13 @@ if t_temp:
     )
 
 if t_hum:
-
     testo += (
-        f"Umidità 24h: "
+        f"Umidita 24h: "
         f"{min(t_hum):.1f} / "
         f"{max(t_hum):.1f} %\n"
     )
 
 if t_press:
-
     testo += (
         f"Pressione 24h: "
         f"{min(t_press):.1f} / "
@@ -560,14 +513,12 @@ if t_press:
     )
 
 if t_wind:
-
     testo += (
         f"Vento medio max 24h: "
         f"{max(t_wind):.1f} km/h\n"
     )
 
 if t_gust:
-
     testo += (
         f"Raffica max 24h: "
         f"{max(t_gust):.1f} km/h\n"
@@ -576,102 +527,74 @@ if t_gust:
 testo += "\n"
 
 
-# ------------------------------------------------------
 # PRESSIONE / ZAMBRETTI
-# ------------------------------------------------------
 
 testo += "📈 PRESSIONE\n"
 
 if delta_pressione is not None:
-
     testo += (
         f"Trend 3h: "
         f"{delta_pressione:+.1f} hPa "
         f"({trend_pressione})\n"
     )
-
 else:
-
     testo += "Trend 3h: dati insufficienti\n"
 
-
 if z_numero is not None:
-
     testo += (
         f"Zambretti: {z_numero} — "
         f"{z_testo}\n"
     )
-
 else:
-
     testo += "Zambretti: dati insufficienti\n"
-
 
 testo += "\n"
 
 
-# ------------------------------------------------------
 # CASA
-# ------------------------------------------------------
 
 testo += "🏠 CASA\n"
 
 if c_temp_now is not None:
-
     testo += (
         f"Temperatura: "
         f"{c_temp_now:.1f} °C\n"
     )
-
 else:
-
     testo += "Temperatura: dato non disponibile\n"
 
-
 if c_hum_now is not None:
-
     testo += (
-        f"Umidità: "
+        f"Umidita: "
         f"{c_hum_now:.1f} %\n"
     )
-
 else:
-
-    testo += "Umidità: dato non disponibile\n"
-
+    testo += "Umidita: dato non disponibile\n"
 
 if eta_casa is not None:
-
     testo += (
         f"Aggiornamento: "
         f"{eta_casa:.0f} min fa\n"
     )
 
-
 if c_temp:
-
     testo += (
         f"Temp. 24h: "
         f"{min(c_temp):.1f} / "
         f"{max(c_temp):.1f} °C\n"
     )
 
-
 if c_hum:
-
     testo += (
-        f"Umidità 24h: "
+        f"Umidita 24h: "
         f"{min(c_hum):.1f} / "
         f"{max(c_hum):.1f} %\n"
     )
 
-
 testo += "\n"
 
 
-# ------------------------------------------------------
 # ORTO
-# ------------------------------------------------------
 
 testo += "🌱 ORTO\n"
 
@@ -679,7 +602,7 @@ if o_temp_now is not None:
     testo += f"Temperatura: {o_temp_now:.1f} °C\n"
 
 if o_hum_now is not None:
-    testo += f"Umidità: {o_hum_now:.1f} %\n"
+    testo += f"Umidita: {o_hum_now:.1f} %\n"
 
 if o_soil_now is not None:
     testo += f"Temp. suolo: {o_soil_now:.1f} °C\n"
@@ -708,7 +631,7 @@ if o_temp:
 
 if o_hum:
     testo += (
-        f"Umidità 24h: "
+        f"Umidita 24h: "
         f"{min(o_hum):.1f} / "
         f"{max(o_hum):.1f} %\n"
     )
@@ -720,21 +643,16 @@ if o_soil:
         f"{max(o_soil):.1f} °C\n"
     )
 
-
 testo += (
     "\n"
     "Pioggia: dato locale della stazione, "
     "non disponibile su ThingSpeak.\n\n"
 )
 
-
 testo += (
     "🕐 "
-    + adesso_locale.strftime(
-        "%d/%m/%Y %H:%M"
-    )
+    + adesso_locale.strftime("%d/%m/%Y %H:%M")
 )
-
 
 invia_telegram(testo)
 
