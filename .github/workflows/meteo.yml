@@ -26,3 +26,16 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
         run: python meteo.py
+
+      - name: Salva stato report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet ultimo_report.txt; then
+            echo "Nessun nuovo stato report da salvare."
+          else
+            git add ultimo_report.txt
+            git commit -m "Aggiorna stato report orario"
+            git push
+          fi
