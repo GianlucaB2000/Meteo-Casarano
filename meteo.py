@@ -11,8 +11,7 @@ CASA_CHANNEL = 3211426
 TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN")
 TG_CHAT_ID = os.environ.get("TG_CHAT_ID")
 
-DATA_TEST_REPORT = "2026-09-16"
-TZ_LOCALE = ZoneInfo("Europe/Rome")
+DATA_TEST_REPORT = datetime.now(TZ_LOCALE).strftime("%Y-%m-%d")TZ_LOCALE = ZoneInfo("Europe/Rome")
 
 FILE_STATO_REPORT = "ultimo_report.txt"
 
