@@ -32,10 +32,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          if git diff --quiet ultimo_report.txt; then
-            echo "Nessun nuovo stato report da salvare."
-          else
+          if [ -f ultimo_report.txt ]; then
             git add ultimo_report.txt
-            git commit -m "Aggiorna stato report orario"
-            git push
+
+            if git diff --cached --quiet; then
+              echo "Nessun nuovo stato report da salvare."
+            else
+              git commit -m "Aggiorna stato report orario"
+              git push
+            fi
+          else
+            echo "Nessun file ultimo_report.txt da salvare."
           fi
