@@ -28,7 +28,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 body{padding-bottom:64px;}
 .chart-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 8px 12px 4px;margin-bottom:12px;}
 .chart-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin-bottom:8px;padding-left:8px;}
-.chart-wrap{position:relative;height:280px;}
+.chart-sub{font-size:.62rem;color:var(--sub);margin:-4px 0 8px;padding-left:8px;}
+.chart-wrap{position:relative;height:300px;}
 .status{font-size:.7rem;color:var(--sub);margin:10px 2px;}
 
 /* Selettore dati grezzi / medie */
@@ -36,6 +37,24 @@ body{padding-bottom:64px;}
 .mode-lbl{font-size:.6rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sub);margin-right:2px;}
 .mode-btn{background:var(--bg3);border:1px solid var(--brd);color:var(--sub);font-size:.68rem;padding:6px 12px;border-radius:8px;cursor:pointer;}
 .mode-btn.active{color:var(--acc);border-color:var(--acc);}
+
+/* Box correlazione vento */
+.wind-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:13px 14px;margin-bottom:12px;font-size:.72rem;line-height:1.55;}
+.wind-box b{color:var(--txt);}
+.wind-box .interp{color:var(--sub);font-size:.66rem;margin-top:7px;display:block;}
+
+/* Estremi */
+.ext-max{color:var(--orn);font-weight:700;font-size:1.05rem;font-family:'JetBrains Mono',monospace;}
+.ext-min{color:var(--acc);font-weight:700;font-size:1.05rem;font-family:'JetBrains Mono',monospace;}
+.ext-time{font-size:.6rem;color:var(--sub);margin-top:2px;}
+
+/* Leggibilità migliorata su mobile */
+@media (max-width:600px){
+  .chart-wrap{height:340px;}
+  .chart-box{padding:14px 6px 14px 2px;}
+  .val{font-size:1.7rem;}
+  .card{padding:13px 10px;}
+}
 </style>
 </head>
 <body>
@@ -75,6 +94,31 @@ body{padding-bottom:64px;}
         indipendentemente dalla vista scelta qui sotto per i grafici.
     </div>
 
+    <div class="sec">Correlazione vento ↔ delta termico</div>
+    <div class="wind-box" id="windBox">Calcolo in corso...</div>
+
+    <div class="sec">Estremi (dati grezzi, ultime 24h)</div>
+    <div class="grid">
+        <div class="card">
+            <div class="lbl">Tetto</div>
+            <div class="ext-max" id="extTettoMax">--</div><div class="ext-time" id="extTettoMaxT">--</div>
+            <div style="height:6px"></div>
+            <div class="ext-min" id="extTettoMin">--</div><div class="ext-time" id="extTettoMinT">--</div>
+        </div>
+        <div class="card">
+            <div class="lbl">Orto</div>
+            <div class="ext-max" id="extOrtoMax">--</div><div class="ext-time" id="extOrtoMaxT">--</div>
+            <div style="height:6px"></div>
+            <div class="ext-min" id="extOrtoMin">--</div><div class="ext-time" id="extOrtoMinT">--</div>
+        </div>
+        <div class="card">
+            <div class="lbl">Delta</div>
+            <div class="ext-max" id="extDeltaMax">--</div><div class="ext-time" id="extDeltaMaxT">--</div>
+            <div style="height:6px"></div>
+            <div class="ext-min" id="extDeltaMin">--</div><div class="ext-time" id="extDeltaMinT">--</div>
+        </div>
+    </div>
+
     <div class="sec">Grafici</div>
     <div class="mode-toolbar">
         <span class="mode-lbl">Visualizzazione dati:</span>
@@ -85,11 +129,20 @@ body{padding-bottom:64px;}
 
     <div class="chart-box">
         <div class="chart-title">Temperature sovrapposte (Tetto vs Orto)</div>
-        <div class="chart-wrap" style="height:320px"><canvas id="cTemp"></canvas></div>
+        <div class="chart-wrap" style="height:340px"><canvas id="cTemp"></canvas></div>
     </div>
     <div class="chart-box">
         <div class="chart-title">Delta Tetto − Orto</div>
+        <div class="chart-sub">Scala fissa ±0.3 °C in tutte le viste</div>
         <div class="chart-wrap"><canvas id="cDelta"></canvas></div>
+    </div>
+    <div class="chart-box">
+        <div class="chart-title">Luminosità (lux)</div>
+        <div class="chart-wrap"><canvas id="cLux"></canvas></div>
+    </div>
+    <div class="chart-box">
+        <div class="chart-title">Vento medio Tetto (km/h)</div>
+        <div class="chart-wrap"><canvas id="cVento"></canvas></div>
     </div>
 </div>
 
@@ -101,16 +154,21 @@ body{padding-bottom:64px;}
 
 <script>
     // Porting della logica dello script Python (tetto_vs_orto): stessa
-    // finestra (24 ore), stesse fasce orarie per il calcolo del delta, e lo
-    // stesso selettore Dati grezzi / Media 10 min / Media 30 min per i grafici.
+    // finestra (24 ore), stesse fasce orarie per il calcolo del delta, lo
+    // stesso selettore Dati grezzi / Media 10 min / Media 30 min per i grafici,
+    // più correlazione vento-delta, estremi ed i grafici di luce/vento.
     const TS_TETTO = 3217870, TS_TETTO_KEY = 'E1WOMQU43G4GNNXI';
     const TS_ORTO  = 3358319, TS_ORTO_KEY  = '';
-    // Mappatura campi Orto confermata (canale 3358319): field1 = Temp Aria (SHT40).
-    const FIELD_ORTO_TEMP = 1;
+    // Mappatura campi confermata.
+    const FIELD_ORTO_TEMP  = 1;
+    const FIELD_ORTO_LUX   = 6;
+    const FIELD_TETTO_VENTO = 4;
+    const FIELD_TETTO_LUX   = 7;
 
     function el(id){ return document.getElementById(id); }
     function fmt(v){ return (v===null||v===undefined||isNaN(v))?'--':(v>=0?'+':'')+v.toFixed(3)+' °C'; }
     function colorFor(v){ if(v===null||v===undefined||isNaN(v)) return '#94a3b8'; return v>0.05?'#fb923c':(v<-0.05?'#4ade80':'#94a3b8'); }
+    function fmtT(ts){ const d=new Date(ts); return d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}); }
 
     function fetchFeeds(ch,key){
         // Ultime 24 ore (era days=2 / 48h)
@@ -127,7 +185,6 @@ body{padding-bottom:64px;}
         const out = [];
         let start = 0;
         let sum = 0, cnt = 0;
-        // implementazione a due puntatori (i dati sono ordinati per tempo)
         for(let i=0;i<series.length;i++){
             if(series[i].v!==null){ sum+=series[i].v; cnt++; }
             while(series[i].t - series[start].t > WIN){
@@ -140,9 +197,8 @@ body{padding-bottom:64px;}
     }
 
     function alignByTimestamp(a,b){
-        // Allinea due serie sui timestamp del Tetto, prendendo il valore Orto
-        // piu' vicino entro 15 minuti (le due stazioni non campionano allo
-        // stesso istante).
+        // Allinea due serie sui timestamp del Tetto, prendendo il valore piu'
+        // vicino entro 15 minuti (le due stazioni non campionano allo stesso istante).
         const TOL = 15*60*1000;
         let j=0;
         const out=[];
@@ -154,44 +210,108 @@ body{padding-bottom:64px;}
         return out;
     }
 
-    let chartTemp=null, chartDelta=null;
+    function despike(series, maxJump, half){
+        half = half || 4;
+        const values = series.map(p=>p.v);
+        for(let i=0;i<series.length;i++){
+            if(values[i]===null) continue;
+            const lo=Math.max(0,i-half), hi=Math.min(series.length-1,i+half);
+            const win=[];
+            for(let j=lo;j<=hi;j++){ if(j!==i && values[j]!==null) win.push(values[j]); }
+            if(win.length<5) continue;
+            win.sort((a,b)=>a-b);
+            const med=win[Math.floor(win.length/2)];
+            if(Math.abs(values[i]-med)>maxJump){ series[i].v=null; }
+        }
+    }
+
+    function trovaEstremi(series){
+        let mx=null, mn=null, tmx=null, tmn=null;
+        for(const p of series){
+            if(p.v===null||p.v===undefined||isNaN(p.v)) continue;
+            if(mx===null||p.v>mx){ mx=p.v; tmx=p.t; }
+            if(mn===null||p.v<mn){ mn=p.v; tmn=p.t; }
+        }
+        return { max:mx, min:mn, tmax:tmx, tmin:tmn };
+    }
+
+    function pearson(xs, ys){
+        const n = xs.length;
+        if(n<2) return null;
+        const mx = xs.reduce((a,b)=>a+b,0)/n, my = ys.reduce((a,b)=>a+b,0)/n;
+        let num=0, dx2=0, dy2=0;
+        for(let i=0;i<n;i++){ const dx=xs[i]-mx, dy=ys[i]-my; num+=dx*dy; dx2+=dx*dx; dy2+=dy*dy; }
+        const den = Math.sqrt(dx2*dy2);
+        return den>0 ? num/den : null;
+    }
+    function median(arr){ const s=[...arr].sort((a,b)=>a-b); const n=s.length; return n%2? s[(n-1)/2] : (s[n/2-1]+s[n/2])/2; }
+
+    let chartTemp=null, chartDelta=null, chartLux=null, chartVento=null;
     let modesData=null;
 
     Promise.all([ fetchFeeds(TS_TETTO,TS_TETTO_KEY), fetchFeeds(TS_ORTO,TS_ORTO_KEY) ]).then(([feedsT,feedsO])=>{
         if(!feedsT.length || !feedsO.length){ el('status').textContent='Dati mancanti da una delle due stazioni'; return; }
 
-        const sT = feedsT.map(f=>({ t:new Date(f.created_at).getTime(), v: f.field1!==null&&f.field1!==undefined&&f.field1!==''?parseFloat(f.field1):null }));
-        const sO = feedsO.map(f=>({ t:new Date(f.created_at).getTime(), v: f['field'+FIELD_ORTO_TEMP]!==null&&f['field'+FIELD_ORTO_TEMP]!==undefined&&f['field'+FIELD_ORTO_TEMP]!==''?parseFloat(f['field'+FIELD_ORTO_TEMP]):null }));
+        const num = v => (v!==null&&v!==undefined&&v!=='')?parseFloat(v):null;
 
-        // Scarta gli outlier confrontando ogni punto con la MEDIANA di una
-        // finestra di punti vicini (non solo il vicino immediato): un glitch
-        // che dura 2-3 campioni di fila sfuggiva al controllo precedente,
-        // che guardava solo un punto alla volta.
-        function despike(series, maxJump, half){
-            half = half || 4;
-            const values = series.map(p=>p.v);
-            for(let i=0;i<series.length;i++){
-                if(values[i]===null) continue;
-                const lo=Math.max(0,i-half), hi=Math.min(series.length-1,i+half);
-                const win=[];
-                for(let j=lo;j<=hi;j++){ if(j!==i && values[j]!==null) win.push(values[j]); }
-                if(win.length<5) continue;
-                win.sort((a,b)=>a-b);
-                const med=win[Math.floor(win.length/2)];
-                if(Math.abs(values[i]-med)>maxJump){ series[i].v=null; }
-            }
-        }
-        despike(sT, 1.2);
-        despike(sO, 1.2);
+        const sTtemp  = feedsT.map(f=>({ t:new Date(f.created_at).getTime(), v: num(f.field1) }));
+        const sTvento = feedsT.map(f=>({ t:new Date(f.created_at).getTime(), v: num(f['field'+FIELD_TETTO_VENTO]) }));
+        const sTlux   = feedsT.map(f=>({ t:new Date(f.created_at).getTime(), v: num(f['field'+FIELD_TETTO_LUX]) }));
+        const sOtemp  = feedsO.map(f=>({ t:new Date(f.created_at).getTime(), v: num(f['field'+FIELD_ORTO_TEMP]) }));
+        const sOlux   = feedsO.map(f=>({ t:new Date(f.created_at).getTime(), v: num(f['field'+FIELD_ORTO_LUX]) }));
+
+        // Scarta outlier confrontando ogni punto con la mediana di una finestra
+        // di punti vicini (un glitch di 2-3 campioni di fila sfugge al controllo
+        // che guarda solo un punto alla volta).
+        despike(sTtemp, 1.2);
+        despike(sOtemp, 1.2);
+
+        // Estremi sui dati grezzi (post-despike)
+        const estTetto = trovaEstremi(sTtemp);
+        const estOrto  = trovaEstremi(sOtemp);
+        const rawAligned = alignByTimestamp(sTtemp, sOtemp)
+            .filter(p=>p.tetto!==null && p.orto!==null)
+            .map(p=>({ t:p.t, v:p.tetto-p.orto }));
+        const estDelta = trovaEstremi(rawAligned);
+
+        el('extTettoMax').textContent = estTetto.max!==null? estTetto.max.toFixed(2)+' °C' : '--';
+        el('extTettoMaxT').textContent = estTetto.tmax? 'MAX · '+fmtT(estTetto.tmax) : '--';
+        el('extTettoMin').textContent = estTetto.min!==null? estTetto.min.toFixed(2)+' °C' : '--';
+        el('extTettoMinT').textContent = estTetto.tmin? 'MIN · '+fmtT(estTetto.tmin) : '--';
+
+        el('extOrtoMax').textContent = estOrto.max!==null? estOrto.max.toFixed(2)+' °C' : '--';
+        el('extOrtoMaxT').textContent = estOrto.tmax? 'MAX · '+fmtT(estOrto.tmax) : '--';
+        el('extOrtoMin').textContent = estOrto.min!==null? estOrto.min.toFixed(2)+' °C' : '--';
+        el('extOrtoMinT').textContent = estOrto.tmin? 'MIN · '+fmtT(estOrto.tmin) : '--';
+
+        el('extDeltaMax').textContent = estDelta.max!==null? (estDelta.max>=0?'+':'')+estDelta.max.toFixed(2)+' °C' : '--';
+        el('extDeltaMaxT').textContent = estDelta.tmax? 'MAX · '+fmtT(estDelta.tmax) : '--';
+        el('extDeltaMin').textContent = estDelta.min!==null? (estDelta.min>=0?'+':'')+estDelta.min.toFixed(2)+' °C' : '--';
+        el('extDeltaMinT').textContent = estDelta.tmin? 'MIN · '+fmtT(estDelta.tmin) : '--';
 
         // Costruisce, per una data finestra di media (null = dati grezzi), la
-        // serie allineata Tetto/Orto con il delta calcolato punto per punto.
+        // serie allineata Tetto/Orto con delta, lux e vento.
         function buildAligned(minutes){
-            const smT = rollingMeanWindow(sT, minutes);
-            const smO = rollingMeanWindow(sO, minutes);
-            return alignByTimestamp(smT, smO)
-                .filter(p=>p.tetto!==null && p.orto!==null)
-                .map(p=>({ t:p.t, tetto:p.tetto, orto:p.orto, delta:p.tetto-p.orto }));
+            const smTtemp  = rollingMeanWindow(sTtemp, minutes);
+            const smTvento = rollingMeanWindow(sTvento, minutes);
+            const smTlux   = rollingMeanWindow(sTlux, minutes);
+            const smOtemp  = rollingMeanWindow(sOtemp, minutes);
+            const smOlux   = rollingMeanWindow(sOlux, minutes);
+
+            const base = alignByTimestamp(smTtemp, smOtemp)
+                .filter(p=>p.tetto!==null && p.orto!==null);
+
+            // Indice per timestamp -> valore, per lux/vento (stessa lunghezza di smTtemp/smOtemp)
+            const mapByT = arr => { const m=new Map(); arr.forEach(p=>m.set(p.t,p.v)); return m; };
+            const mVento = mapByT(smTvento), mLuxT = mapByT(smTlux), mLuxO = mapByT(smOtemp.length? smOlux: smOlux);
+            const mLuxOreal = mapByT(smOlux);
+
+            return base.map(p=>({
+                t:p.t, tetto:p.tetto, orto:p.orto, delta:p.tetto-p.orto,
+                vento: mVento.has(p.t)? mVento.get(p.t): null,
+                luxT: mLuxT.has(p.t)? mLuxT.get(p.t): null,
+                luxO: mLuxOreal.has(p.t)? mLuxOreal.get(p.t): null
+            }));
         }
 
         modesData = { raw: buildAligned(null), '10min': buildAligned(10), '30min': buildAligned(30) };
@@ -210,9 +330,6 @@ body{padding-bottom:64px;}
         const dNotte  = mean(withDelta.filter(p=>{ const o=rome(p.t); return o<6||o>=20; }).map(p=>p.delta));
         const dPicco  = mean(withDelta.filter(p=>{ const o=rome(p.t); return o>=13&&o<16; }).map(p=>p.delta));
 
-        // Delta "attuale": l'ultimo punto della serie e' gia' la media mobile
-        // degli ultimi 10 minuti, quindi rappresenta esattamente "il delta
-        // adesso, calcolato sui valori mediati degli ultimi 10 minuti".
         const last = withDelta[withDelta.length-1];
         const minutesAgo = Math.round((Date.now()-last.t)/60000);
         el('dNow').textContent = fmt(last.delta);
@@ -229,6 +346,23 @@ body{padding-bottom:64px;}
         el('dPicco').textContent=fmt(dPicco); el('dPicco').style.color=colorFor(dPicco);
         el('status').textContent='Periodo: ultime 24h · '+withDelta.length+' punti allineati (media 10 min)';
 
+        // Correlazione vento-delta (su media 10min, come nello script Python)
+        const pairs = withDelta.filter(p=>p.vento!==null && p.delta!==null);
+        if(pairs.length>=20){
+            const xs = pairs.map(p=>p.vento), ys = pairs.map(p=>p.delta);
+            const r = pearson(xs,ys);
+            const soglia = median(xs);
+            const basso = mean(pairs.filter(p=>p.vento<=soglia).map(p=>p.delta));
+            const alto  = mean(pairs.filter(p=>p.vento>soglia).map(p=>p.delta));
+            el('windBox').innerHTML =
+                'Correlazione Pearson vento–Δ: <b>r = '+(r>=0?'+':'')+r.toFixed(3)+'</b> (n='+pairs.length+'). '+
+                'Δ medio con vento ≤ '+soglia.toFixed(1)+' km/h: <b>'+fmt(basso)+'</b> · '+
+                'con vento &gt; '+soglia.toFixed(1)+' km/h: <b>'+fmt(alto)+'</b>.'+
+                '<span class="interp">Interpretazione: se con più vento il Δ (Tetto−Orto) diventa più negativo, lo schermo Tetto beneficia maggiormente della ventilazione (minore surriscaldamento). Con vento quasi nullo può prevalere l\'altro schermo.</span>';
+        } else {
+            el('windBox').textContent = 'Dati vento insufficienti per la correlazione (n='+pairs.length+').';
+        }
+
         makeCharts('10min');
     }).catch(e=>{ console.warn(e); el('status').textContent='Errore nel caricamento dei dati'; });
 
@@ -241,19 +375,22 @@ body{padding-bottom:64px;}
             responsive:true, maintainAspectRatio:false, spanGaps:true,
             interaction:{ mode:'index', intersect:false },
             layout:{ padding:{ right: 10 } },
-            plugins:{ legend:{ labels:{ color:'#c5d0e0', boxWidth:14, padding:12, font:{ size: isMobile?13:12 } } } },
+            plugins:{ legend:{ labels:{ color:'#c5d0e0', boxWidth:14, padding:12, font:{ size: isMobile?14:12 } } } },
+            elements:{ point:{ radius:0 }, line:{ borderWidth: isMobile?2.6:2.2 } },
             scales:{
-                x:{ type:'time', time:{ tooltipFormat:'dd/MM HH:mm', displayFormats:{hour:'HH:mm', day:'dd/MM'} }, ticks:{ color:'#8b9bb4', maxRotation:0, maxTicksLimit: isMobile?5:10, font:{ size: isMobile?11:10 } }, grid:{ color:'rgba(51,65,85,0.45)' } },
-                y:{ ticks:{ color:'#8b9bb4', maxTicksLimit: isMobile?6:8, font:{ size: isMobile?12:11 } }, grid:{ color:'rgba(51,65,85,0.45)' } }
+                x:{ type:'time', time:{ tooltipFormat:'dd/MM HH:mm', displayFormats:{hour:'HH:mm', day:'dd/MM'} }, ticks:{ color:'#8b9bb4', maxRotation:0, maxTicksLimit: isMobile?4:10, font:{ size: isMobile?12:10 } }, grid:{ color:'rgba(51,65,85,0.45)' } },
+                y:{ ticks:{ color:'#8b9bb4', maxTicksLimit: isMobile?6:8, font:{ size: isMobile?13:11 } }, grid:{ color:'rgba(51,65,85,0.45)' } }
             }
         };
 
         if(chartTemp) chartTemp.destroy();
         if(chartDelta) chartDelta.destroy();
+        if(chartLux) chartLux.destroy();
+        if(chartVento) chartVento.destroy();
 
         chartTemp = new Chart(el('cTemp'), { type:'line', data:{ datasets:[
-            { label:'Tetto', data: rows.map(p=>({x:p.t,y:p.tetto})), borderColor:'#38bdf8', borderWidth:2.4, pointRadius:0, tension:0.15 },
-            { label:'Orto',  data: rows.map(p=>({x:p.t,y:p.orto})),  borderColor:'#f87171', borderWidth:2.4, pointRadius:0, tension:0.15 }
+            { label:'Tetto', data: rows.map(p=>({x:p.t,y:p.tetto})), borderColor:'#38bdf8', tension:0.15 },
+            { label:'Orto',  data: rows.map(p=>({x:p.t,y:p.orto})),  borderColor:'#f87171', tension:0.15 }
         ]}, options: baseOpts });
 
         // Scala SEMPRE fissa a +-0.3°C, in tutte e tre le viste: anche se un
@@ -262,9 +399,20 @@ body{padding-bottom:64px;}
         const deltaOpts = JSON.parse(JSON.stringify(baseOpts));
         deltaOpts.scales.y.min = -0.3; deltaOpts.scales.y.max = 0.3;
         chartDelta = new Chart(el('cDelta'), { type:'line', data:{ datasets:[
-            { label:'ΔT (Tetto − Orto)', data: rows.map(p=>({x:p.t,y:p.delta})), borderColor:'#38bdf8', borderWidth:2.2, pointRadius:0, tension:0.15,
+            { label:'ΔT (Tetto − Orto)', data: rows.map(p=>({x:p.t,y:p.delta})), borderColor:'#38bdf8', tension:0.15,
               fill:{ target:{value:0}, above:'rgba(251,146,60,0.25)', below:'rgba(74,222,128,0.25)' } }
         ]}, options: deltaOpts });
+
+        chartLux = new Chart(el('cLux'), { type:'line', data:{ datasets:[
+            { label:'Lux Tetto', data: rows.map(p=>({x:p.t,y:p.luxT})), borderColor:'#facc15', tension:0.15 },
+            { label:'Lux Orto',  data: rows.map(p=>({x:p.t,y:p.luxO})), borderColor:'#c084fc', tension:0.15 }
+        ]}, options: baseOpts });
+
+        const ventoOpts = JSON.parse(JSON.stringify(baseOpts));
+        chartVento = new Chart(el('cVento'), { type:'line', data:{ datasets:[
+            { label:'Vento medio Tetto (km/h)', data: rows.map(p=>({x:p.t,y:p.vento})), borderColor:'#a78bfa', tension:0.15,
+              fill:{ target:'origin', above:'rgba(167,139,250,0.15)' } }
+        ]}, options: ventoOpts });
     }
 
     function setMode(mode){
@@ -273,6 +421,8 @@ body{padding-bottom:64px;}
         el(idMap[mode]).classList.add('active');
         makeCharts(mode);
     }
+
+    window.addEventListener('resize', ()=>{ if(modesData){ const active=document.querySelector('.mode-btn.active'); const mode = active===el('btnRaw')?'raw':(active===el('btn30min')?'30min':'10min'); makeCharts(mode); } });
 </script>
 </body>
 </html>
