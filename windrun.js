@@ -84,11 +84,15 @@
     let days={}, period='7d', chartObj=null;
 
     function loadAll(){
+        // Mese corrente per primo, poi a ritroso: Oggi/7 giorni/Mese appaiono
+        // subito e l'Anno cresce man mano che gli altri mesi arrivano.
         const now=new Date(), months=[];
-        for(let m=0;m<=now.getMonth();m++) months.push(new Date(now.getFullYear(),m,1));
-        months.reduce(function(p,ms){ return p.then(function(acc){ return loadMonth(ms).then(function(d){ return Object.assign(acc,d); }); }); }, Promise.resolve({}))
-            .then(function(all){ days=all; update(); })
-            .catch(function(e){ console.warn('[windrun]',e); });
+        for(let m=now.getMonth();m>=0;m--) months.push(new Date(now.getFullYear(),m,1));
+        months.reduce(function(p,ms){
+            return p.then(function(){
+                return loadMonth(ms).then(function(d){ Object.assign(days,d); update(); });
+            });
+        }, Promise.resolve()).catch(function(e){ console.warn('[windrun]',e); });
     }
 
     function sum(pred){ let s=0; for(const k in days){ if(pred(k)) s+=days[k]; } return s; }
@@ -161,6 +165,6 @@
     }
 
     // Avvio scaglionato (dopo gli altri fetch ThingSpeak, per non farsi limitare)
-    setTimeout(loadAll, 14000);
+    setTimeout(loadAll, 10000);
     setInterval(loadAll, 1800000);
 })();
