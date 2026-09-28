@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stazione Casa</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0d1117;--bg2:#161b22;--bg3:#1c2430;--brd:#30363d;--acc:#58a6ff;--grn:#3fb950;--ylw:#d29922;--red:#f85149;--orn:#e3b341;--txt:#e6edf3;--sub:#8b949e;--val:#cdd9e5;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--txt);padding:0 0 76px;}
+.hdr{background:var(--bg2);border-bottom:1px solid var(--brd);padding:10px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}
+.hdr-name{font-size:1rem;font-weight:700;color:var(--acc);}
+.hdr-loc{font-size:.7rem;color:var(--sub);font-family:'JetBrains Mono',monospace;}
+.hdr-r{text-align:right;font-size:.65rem;color:var(--sub);font-family:'JetBrains Mono',monospace;}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--grn);margin-right:3px;animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.wrap{max-width:960px;margin:0 auto;padding:12px 10px 0;}
+.sec{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--sub);margin:14px 0 7px;padding-left:2px;display:flex;align-items:center;gap:6px;justify-content:space-between;}
+.sec-l{display:flex;align-items:center;gap:6px;}
+.grid{display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));}
+.card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:11px 13px;transition:border-color .3s;}
+.lbl{font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--sub);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;}
+.val{font-size:1.75rem;font-weight:700;color:var(--grn);font-family:'JetBrains Mono',monospace;line-height:1;}
+.unit{font-size:.62rem;color:var(--sub);margin-top:3px;}
+.ex-tabs{display:flex;gap:4px;margin-top:8px;}
+.ex-tab{background:var(--bg3);border:1px solid var(--brd);color:var(--sub);font-size:.6rem;padding:3px 8px;border-radius:6px;cursor:pointer;}
+.ex-tab.active{color:var(--acc);border-color:var(--acc);}
+.ex-panel{display:none;margin-top:6px;}
+.ex-panel.show{display:block;}
+.ex-row{display:flex;justify-content:space-between;font-size:.72rem;}
+.emn{color:#60a5fa;font-weight:600;font-family:'JetBrains Mono',monospace;}
+.emx{color:var(--orn);font-weight:600;font-family:'JetBrains Mono',monospace;}
+.et{display:block;font-size:.6rem;color:var(--sub);margin-top:1px;}
+.pbtns{display:flex;gap:6px;margin-top:6px;}
+.pbtn{background:var(--bg3);border:1px solid var(--brd);color:var(--sub);font-size:.6rem;padding:4px 9px;border-radius:6px;cursor:pointer;}
+.pbtn.active{color:var(--acc);border-color:var(--acc);}
+.hero{grid-column:1/-1;border-color:var(--acc);padding:16px;}
+.hero-val{font-size:1.3rem;font-weight:700;color:var(--val);font-family:'JetBrains Mono',monospace;}
+.note{font-size:.62rem;color:var(--sub);margin:0;font-style:italic;line-height:1.5;}
+.chart-toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.chart-sec{flex-wrap:wrap;row-gap:8px;}
+.chart-status-line{font-size:.6rem;color:var(--sub);margin:0 0 8px 2px;}
+.ct-btn{background:var(--bg3);border:1px solid var(--brd);color:var(--sub);font-size:.68rem;padding:6px 11px;border-radius:8px;cursor:pointer;}
+.ct-btn.active{color:var(--acc);border-color:var(--acc);}
+.chart-grid{display:grid;gap:10px;grid-template-columns:1fr;}
+.chart-box{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:12px 14px;margin-bottom:0;}
+.chart-title{font-size:.65rem;text-transform:uppercase;letter-spacing:.08em;color:var(--sub);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;}
+.chart-wrap{position:relative;height:220px;}
+.pagenav{position:fixed;left:0;right:0;bottom:0;background:var(--bg2);border-top:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between;padding:10px 6px;z-index:200;}
+.pagenav-btn{background:var(--bg3);border:1px solid var(--brd);color:var(--acc);font-size:1.4rem;line-height:1;padding:8px 18px;border-radius:8px;text-decoration:none;user-select:none;}
+.pagenav-label{font-size:.72rem;color:var(--sub);text-align:center;flex:1;}
+
+/* Badge comfort */
+.badge{font-size:.58rem;font-weight:700;padding:2px 7px;border-radius:20px;white-space:nowrap;}
+.badge-ottimale{background:rgba(63,185,80,.15);color:var(--grn);border:1px solid var(--grn);}
+.badge-caldo{background:rgba(248,81,73,.15);color:var(--red);border:1px solid var(--red);}
+.badge-freddo{background:rgba(88,166,255,.15);color:var(--acc);border:1px solid var(--acc);}
+.badge-afa{background:rgba(227,179,65,.15);color:var(--orn);border:1px solid var(--orn);}
+.badge-secco{background:rgba(210,153,34,.15);color:var(--ylw);border:1px solid var(--ylw);}
+
+/* Info tooltip */
+.info-wrap{position:relative;display:inline-flex;}
+.info-icon{width:15px;height:15px;border-radius:50%;border:1px solid var(--sub);color:var(--sub);font-size:.6rem;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
+.info-icon:hover{color:var(--acc);border-color:var(--acc);}
+.info-pop{display:none;position:absolute;right:0;top:20px;background:var(--bg3);border:1px solid var(--brd);border-radius:8px;padding:10px 12px;width:250px;z-index:50;box-shadow:0 4px 14px rgba(0,0,0,.4);}
+.info-pop.show{display:block;}
+
+/* Gauge */
+.gauge-box{display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:center;padding:6px 0 2px;}
+.gauge-item{display:flex;flex-direction:column;align-items:center;}
+.gauge-cap{font-size:.6rem;color:var(--sub);text-transform:uppercase;letter-spacing:.07em;margin-top:2px;}
+.gauge-num{font-size:.95rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--val);margin-top:-4px;}
+.gauge-value{font-size:1.05rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--val);margin-top:2px;}
+.gauge-note{font-size:.68rem;text-align:center;line-height:1.5;}
+.gauge-note.warn{margin-top:10px;color:var(--red);font-weight:600;background:rgba(248,81,73,.12);border:1px solid var(--red);border-radius:8px;padding:8px 10px;}
+.needle-main, .needle-second{transition:transform .5s ease-out;}
+.gauge-combined{display:flex;justify-content:center;margin-top:4px;}
+.combo-badge{font-size:.72rem;font-weight:700;letter-spacing:.03em;padding:6px 16px;border-radius:20px;text-transform:uppercase;}
+.combo-freddo{background:rgba(88,166,255,.15);color:var(--acc);border:1px solid var(--acc);}
+.combo-secco{background:rgba(210,153,34,.15);color:var(--ylw);border:1px solid var(--ylw);}
+.combo-ottimale{background:rgba(63,185,80,.15);color:var(--grn);border:1px solid var(--grn);}
+.combo-afoso{background:rgba(227,179,65,.15);color:var(--orn);border:1px solid var(--orn);}
+.combo-caldo{background:rgba(248,81,73,.15);color:var(--red);border:1px solid var(--red);}
+
+/* Derived metrics grid */
+.mini-grid{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-top:2px;}
+.mini-card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:9px 11px;}
+.mini-lbl{font-size:.56rem;text-transform:uppercase;letter-spacing:.06em;color:var(--sub);margin-bottom:3px;}
+.mini-val{font-size:1.15rem;font-weight:700;color:var(--val);font-family:'JetBrains Mono',monospace;}
+.mini-unit{font-size:.58rem;color:var(--sub);}
+
+.overlay-toggle{display:flex;align-items:center;gap:5px;font-size:.62rem;color:var(--sub);cursor:pointer;}
+.overlay-toggle input{cursor:pointer;}
+
+/* Badge di tendenza 1h (stile dashboard Tetto) */
+.trend{font-size:.68rem;font-family:'JetBrains Mono',monospace;margin-top:5px;font-weight:600;color:var(--sub);}
+.trend.up{color:var(--red);}
+.trend.down{color:var(--acc);}
+.trend.flat{color:var(--sub);}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+    <div>
+        <div class="hdr-name">🏠 Stazione Casa</div>
+        <div class="hdr-loc">Interno · confronto con Tetto</div>
+    </div>
+    <div class="hdr-r"><span class="dot"></span><span id="updAgo">--</span> fa</div>
+</div>
+
+<div class="wrap">
+    <div class="sec">Comfort Temperatura / Umidità</div>
+    <div class="card">
+        <div class="gauge-box" id="gaugeBox">
+            <div class="gauge-item">
+                <svg id="gaugeTemp" width="150" height="95" viewBox="0 0 150 95"></svg>
+                <div class="gauge-value" id="gaugeTempValue">-- °C</div>
+                <div class="gauge-cap">Temperatura</div>
+            </div>
+            <div class="gauge-item">
+                <svg id="gaugeHum" width="150" height="95" viewBox="0 0 150 95"></svg>
+                <div class="gauge-value" id="gaugeHumValue">-- %</div>
+                <div class="gauge-cap">Umidità</div>
+            </div>
+        </div>
+        <div class="gauge-combined">
+            <span class="combo-badge" id="comboBadge">--</span>
+        </div>
+        <div class="gauge-note" id="gaugeHumidexNote" style="display:none;"></div>
+    </div>
+
+    <div class="sec">Ultimo rilievo</div>
+    <div class="grid">
+        <div class="card" id="cardT">
+            <div class="lbl"><span>Temperatura</span><span class="badge" id="badgeTemp">--</span></div>
+            <div class="trend" id="trendTemp">-- (1h)</div>
+            <div class="ex-tabs">
+                <button class="ex-tab active" onclick="switchTab(this,'t','mo')">Mese</button>
+                <button class="ex-tab" onclick="switchTab(this,'t','yr')">Anno</button>
+            </div>
+            <div id="t_mo" class="ex-panel show"><div class="ex-row"><span class="emn" id="tMoMn_v">--</span><span class="emx" id="tMoMx_v">--</span></div><div class="ex-row"><span class="et" id="tMoMn_t"></span><span class="et" id="tMoMx_t"></span></div></div>
+            <div id="t_yr" class="ex-panel"><div class="ex-row"><span class="emn" id="tYrMn_v">--</span><span class="emx" id="tYrMx_v">--</span></div><div class="ex-row"><span class="et" id="tYrMn_t"></span><span class="et" id="tYrMx_t"></span></div></div>
+        </div>
+        <div class="card" id="cardH">
+            <div class="lbl"><span>Umidità</span><span class="badge" id="badgeHum">--</span></div>
+            <div class="trend" id="trendHum">-- (1h)</div>
+            <div class="ex-tabs">
+                <button class="ex-tab active" onclick="switchTab(this,'h','mo')">Mese</button>
+                <button class="ex-tab" onclick="switchTab(this,'h','yr')">Anno</button>
+            </div>
+            <div id="h_mo" class="ex-panel show"><div class="ex-row"><span class="emn" id="hMoMn_v">--</span><span class="emx" id="hMoMx_v">--</span></div><div class="ex-row"><span class="et" id="hMoMn_t"></span><span class="et" id="hMoMx_t"></span></div></div>
+            <div id="h_yr" class="ex-panel"><div class="ex-row"><span class="emn" id="hYrMn_v">--</span><span class="emx" id="hYrMx_v">--</span></div><div class="ex-row"><span class="et" id="hYrMn_t"></span><span class="et" id="hYrMx_t"></span></div></div>
+        </div>
+        <div class="card" id="cardHx">
+            <div class="lbl"><span>Temp. Percepita</span><span class="badge" id="badgeHx">--</span></div>
+            <div class="val" id="Hx">--</div>
+            <div class="unit">°C (Humidex)</div>
+            <div class="trend" id="trendHx">-- (1h)</div>
+            <div class="ex-tabs">
+                <button class="ex-tab active" onclick="switchTab(this,'hx','mo')">Mese</button>
+                <button class="ex-tab" onclick="switchTab(this,'hx','yr')">Anno</button>
+            </div>
+            <div id="hx_mo" class="ex-panel show"><div class="ex-row"><span class="emn" id="hxMoMn_v">--</span><span class="emx" id="hxMoMx_v">--</span></div><div class="ex-row"><span class="et" id="hxMoMn_t"></span><span class="et" id="hxMoMx_t"></span></div></div>
+            <div id="hx_yr" class="ex-panel"><div class="ex-row"><span class="emn" id="hxYrMn_v">--</span><span class="emx" id="hxYrMx_v">--</span></div><div class="ex-row"><span class="et" id="hxYrMn_t"></span><span class="et" id="hxYrMx_t"></span></div></div>
+        </div>
+        <div class="card">
+            <div class="lbl"><span>Pressione</span></div>
+            <div class="val" id="P">--</div>
+            <div class="unit" id="Pmode">hPa (livello del mare)</div>
+            <div class="trend" id="trendPress">-- (1h)</div>
+            <div class="pbtns">
+                <button class="pbtn active" id="pbSlm" onclick="setPressMode('slm')">Livello mare</button>
+                <button class="pbtn" id="pbRaw" onclick="setPressMode('raw')">Raw (stazione)</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="sec">Metriche derivate</div>
+    <div class="mini-grid">
+        <div class="mini-card">
+            <div class="mini-lbl">Punto di rugiada</div>
+            <div class="mini-val" id="dewPoint">--</div>
+            <div class="mini-unit">°C</div>
+        </div>
+        <div class="mini-card">
+            <div class="mini-lbl">Umidità assoluta</div>
+            <div class="mini-val" id="absHum">--</div>
+            <div class="mini-unit">g/m³</div>
+        </div>
+        <div class="mini-card">
+            <div class="mini-lbl">Humidex (percepita)</div>
+            <div class="mini-val" id="humidex">--</div>
+            <div class="mini-unit">°C</div>
+        </div>
+    </div>
+
+    <div class="sec">Confronto con il Tetto (esterno)</div>
+    <div class="grid">
+        <div class="card hero">
+            <div class="lbl" id="deltaLabel">In attesa dati...</div>
+            <div class="hero-val" id="deltaText">--</div>
+        </div>
+    </div>
+
+    <div class="sec chart-sec">
+        <span class="sec-l">Grafici</span>
+        <div class="chart-toolbar">
+            <button class="ct-btn active" id="btn24h" onclick="setPeriod('24h')">24h</button>
+            <button class="ct-btn" id="btn7d" onclick="setPeriod('7d')">7 giorni</button>
+            <button class="ct-btn" id="btn30d" onclick="setPeriod('30d')">30 giorni</button>
+            <button class="ct-btn" id="btnAnno" onclick="setPeriod('anno')">Anno</button>
+            <label class="overlay-toggle"><input type="checkbox" id="overlayToggle" onchange="onOverlayToggle()">Sovrapponi Tetto</label>
+            <button class="ct-btn" id="btnDelta" onclick="toggleDeltaChart()">📊 Delta Casa-Tetto</button>
+            <div class="info-wrap">
+                <div class="info-icon" onclick="toggleInfo()">i</div>
+                <div class="info-pop" id="infoPop">
+                    Canale ThingSpeak 3211426: field1=Temperatura, field2=Umidità, field3=Pressione raw (stazione),
+                    field5=Pressione a livello del mare. Estremi mese/anno calcolati a risoluzione 10 min
+                    (stessa del Tetto) per essere confrontabili tra loro. Il grafico Anno parte dal 01/01/2026
+                    (inizio dati della stazione); i periodi senza dati compaiono come interruzioni della linea.
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="chart-status-line" id="chartStatus">Caricamento...</div>
+    <div class="chart-grid">
+        <div class="chart-box"><div class="chart-title">🌡 Temperatura (°C)</div><div class="chart-wrap"><canvas id="chartT"></canvas></div></div>
+        <div class="chart-box"><div class="chart-title">🥵 Temperatura Percepita — Humidex (°C)</div><div class="chart-wrap"><canvas id="chartHx"></canvas></div></div>
+        <div class="chart-box"><div class="chart-title">💧 Umidità (%)</div><div class="chart-wrap"><canvas id="chartH"></canvas></div></div>
+        <div class="chart-box" id="deltaChartBox" style="display:none;">
+            <div class="chart-title">↕️ Delta Termico Casa − Tetto (°C)</div>
+            <div class="chart-wrap"><canvas id="chartDelta"></canvas></div>
+            <p class="note" style="margin-top:8px;">Sopra lo zero: dentro casa fa più caldo che fuori. Sotto lo zero: dentro fa più fresco. Utile per vedere quanto la casa "smorza" il caldo esterno e con quanto ritardo.</p>
+        </div>
+    </div>
+</div>
+
+<div class="pagenav">
+    <a class="pagenav-btn" href="index.html">‹</a>
+    <div class="pagenav-label">🏠 Casa</div>
+    <a class="pagenav-btn" href="orto.html">›</a>
+</div>
+
+
+<script>
+    const TS_CH_CASA = 3211426, TS_RKEY_CASA = '';
+    const TS_CH_TETTO = 3217870, TS_RKEY_TETTO = 'E1WOMQU43G4GNNXI';
+    const FIELD = { temp:1, hum:2, pRaw:3, pSlm:5 };
+    // Versione cache: incrementarla forza il browser a non riutilizzare risposte
+    // HTTP precedenti (es. dopo aver corretto un buco di dati / bug di fetch).
+    const CACHE_VER = 'v6';
+    // Data di inizio dei dati della stazione Casa (prima di questa data il canale
+    // ThingSpeak è vuoto). Le richieste storiche non partono mai prima di qui,
+    // così non si interrogano mesi vuoti e non si perdono secondi in retry inutili.
+    const DATA_INIZIO = new Date('2026-01-01T00:00:00');
+    // Piccola pausa tra le richieste a chunk in sequenza, per non superare i
+    // limiti di rate di ThingSpeak (che altrimenti scarta/tronca le risposte).
+    function sleep(ms){ return new Promise(res=>setTimeout(res,ms)); }
+
+    function el(id){ return document.getElementById(id); }
+    // Arrotondamento fisso a 2 cifre decimali per tutti i valori numerici/derivati
+    function fmt(v,d=2){ return (v===null||v===undefined||isNaN(v))?'--':Number(v).toFixed(d); }
+    function tsDateToLocal(ca){ if(!ca||ca.length<16) return ''; const d=new Date(ca); const dd=String(d.getDate()).padStart(2,'0'); const mo=String(d.getMonth()+1).padStart(2,'0'); const hh=String(d.getHours()).padStart(2,'0'); const mm=String(d.getMinutes()).padStart(2,'0'); return dd+'/'+mo+' '+hh+':'+mm; }
+
+    function switchTab(btn,prefix,period){
+        const tabs=btn.parentElement.querySelectorAll('.ex-tab');
+        tabs.forEach(t=>t.classList.remove('active'));
+        btn.classList.add('active');
+        const parent=btn.closest('.card');
+        parent.querySelectorAll('.ex-panel').forEach(p=>p.classList.remove('show'));
+        const target=document.getElementById(prefix+'_'+period);
+        if(target)target.classList.add('show');
+    }
+
+    function toggleInfo(){ el('infoPop').classList.toggle('show'); }
+    document.addEventListener('click', e=>{
+        const pop = el('infoPop');
+        if(pop && pop.classList.contains('show') && !e.target.closest('.info-wrap')) pop.classList.remove('show');
+    });
+
+    // ─── Toggle pressione raw / livello del mare ───
+    let pressMode = 'slm';
+    let lastRaw = null, lastSlm = null;
+    function setPressMode(mode){
+        pressMode = mode;
+        el('pbSlm').classList.toggle('active', mode==='slm');
+        el('pbRaw').classList.toggle('active', mode==='raw');
+        el('Pmode').textContent = mode==='slm' ? 'hPa (livello del mare)' : 'hPa (raw stazione)';
+        const v = mode==='slm' ? lastSlm : lastRaw;
+        el('P').textContent = fmt(v);
+        fetchTrend();
+    }
+
+    // ─── Metriche derivate: punto di rugiada, umidità assoluta, humidex, comfort ───
+    function calcDewPoint(t,rh){
+        if(isNaN(t)||isNaN(rh)||rh<=0) return NaN;
+        const b=17.62,c=243.12;
+        const alpha=Math.log(rh/100)+(b*t)/(c+t);
+        return (c*alpha)/(b-alpha);
+    }
+    function calcAbsHumidity(t,rh){
+        if(isNaN(t)||isNaN(rh)) return NaN;
+        const satVapPress=6.112*Math.exp((17.62*t)/(243.12+t));
+        return 216.7*((rh/100*satVapPress)/(273.15+t));
+    }
+    function calcHumidex(t,rh){
+        if(isNaN(t)||isNaN(rh)) return NaN;
+        const e=6.112*Math.pow(10,(7.5*t)/(237.7+t))*(rh/100);
+        return t+0.5555*(e-10);
+    }
+    // ─── Soglie di comfort UNIFICATE (stessa fonte usata da mini-card, badge
+    // grande, badge di temperatura/umidità e colori dei quadranti):
+    // Temperatura: <19 freddo, 19-26.5 confort, >26.5 caldo
+    // Umidità: <35 secca, 35-60 confort, >60 afosa ───
+    const COMFORT_T_MIN=19, COMFORT_T_MAX=26.5, COMFORT_RH_MIN=35, COMFORT_RH_MAX=60;
+    // Unica funzione di comfort combinato (T + UR + Humidex), usata sia per la
+    // mini-card "Comfort termico" sia per il badge grande sotto i quadranti.
+    // Ordine di valutazione: CALDO AFA > UMIDO/AFOSO > FREDDO > SECCO > OTTIMALE > Nella norma
+    function combinedComfort(t,rh,hx){
+        if(isNaN(t)||isNaN(rh)) return {label:'--', cls:''};
+        // Soglia allineata ESATTAMENTE a quella del quadrante (COMFORT_T_MAX),
+        // così il badge non può più dire "Nella norma" mentre il quadrante è già rosso.
+        if(t>COMFORT_T_MAX || (!isNaN(hx) && hx>=34)) return {label:'Caldo Afa', cls:'combo-caldo'};
+        if(t>=COMFORT_T_MAX-2 && t<=COMFORT_T_MAX && rh>COMFORT_RH_MAX) return {label:'Umido / Afoso', cls:'combo-afoso'};
+        if(t<COMFORT_T_MIN) return {label:'Freddo', cls:'combo-freddo'};
+        if(rh<COMFORT_RH_MIN) return {label:'Secco', cls:'combo-secco'};
+        if(t>=COMFORT_T_MIN+1 && t<=COMFORT_T_MAX-2 && rh>=COMFORT_RH_MIN+5 && rh<=COMFORT_RH_MAX) return {label:'Si Sta Bene', cls:'combo-ottimale'};
+        return {label:'Nella Norma', cls:'combo-ottimale'};
+    }
+    function tempBadge(t){
+        if(isNaN(t)) return {label:'--', cls:''};
+        if(t>COMFORT_T_MAX) return {label:'Alta', cls:'badge-caldo'};
+        if(t<COMFORT_T_MIN) return {label:'Bassa', cls:'badge-freddo'};
+        return {label:'Normale', cls:'badge-ottimale'};
+    }
+    function humBadge(rh){
+        if(isNaN(rh)) return {label:'--', cls:''};
+        if(rh>COMFORT_RH_MAX) return {label:'Alta', cls:'badge-caldo'};
+        if(rh<COMFORT_RH_MIN) return {label:'Secca', cls:'badge-secco'};
+        return {label:'Ottimale', cls:'badge-ottimale'};
+    }
+    // Fasce di disagio da Humidex (Environment Canada, semplificate)
+    function humidexBadge(hx){
+        if(isNaN(hx)) return {label:'--', cls:''};
+        if(hx>=40) return {label:'Estremo', cls:'badge-caldo'};
+        if(hx>=34) return {label:'Elevato', cls:'badge-afa'};
+        if(hx>=27) return {label:'Percepibile', cls:'badge-secco'};
+        return {label:'Confortevole', cls:'badge-ottimale'};
+    }
+    function applyBadge(elId,info){
+        const b=el(elId);
+        b.textContent=info.label;
+        b.className='badge'+(info.cls?' '+info.cls:'');
+    }
+    function updateDerivedMetrics(t,rh){
+        const dp=calcDewPoint(t,rh);
+        const ah=calcAbsHumidity(t,rh);
+        const hx=calcHumidex(t,rh);
+        const combo=combinedComfort(t,rh,hx);
+        el('dewPoint').textContent=fmt(dp);
+        el('absHum').textContent=fmt(ah);
+        el('humidex').textContent=fmt(hx);
+        applyBadge('badgeTemp', tempBadge(t));
+        applyBadge('badgeHum', humBadge(rh));
+        // Bordo card dinamico
+        const cardT=el('cardT'), cardH=el('cardH'), cardHx=el('cardHx');
+        cardT.style.borderColor = t>COMFORT_T_MAX?'var(--red)': t<COMFORT_T_MIN?'var(--acc)':'var(--brd)';
+        cardH.style.borderColor = rh>COMFORT_RH_MAX?'var(--red)': rh<COMFORT_RH_MIN?'var(--ylw)': (rh>=COMFORT_RH_MIN&&rh<=COMFORT_RH_MAX)?'var(--grn)':'var(--brd)';
+        // Card Temperatura Percepita (Humidex): valore live + badge di disagio
+        el('Hx').textContent = fmt(hx);
+        applyBadge('badgeHx', humidexBadge(hx));
+        cardHx.style.borderColor = hx>=40?'var(--red)': hx>=34?'var(--orn)': 'var(--brd)';
+        drawGauges(t,rh,hx);
+        const comboEl=el('comboBadge');
+        comboEl.textContent=combo.label.toUpperCase();
+        comboEl.className='combo-badge'+(combo.cls?' '+combo.cls:'');
+    }
+
+    // ─── Quadrante analogico SVG (termometro/igrometro a lancetta) ───
+    function polar(cx,cy,r,angleDeg){
+        const a=(angleDeg-180)*Math.PI/180;
+        return {x:cx+r*Math.cos(a), y:cy+r*Math.sin(a)};
+    }
+    function arcPath(cx,cy,r,startDeg,endDeg){
+        const s=polar(cx,cy,r,startDeg), e=polar(cx,cy,r,endDeg);
+        const largeArc = (endDeg-startDeg) > 180 ? 1 : 0;
+        return 'M '+s.x+' '+s.y+' A '+r+' '+r+' 0 '+largeArc+' 1 '+e.x+' '+e.y;
+    }
+    const GAUGE_CX=75, GAUGE_CY=85, GAUGE_R=62;
+    function valToAngle(v,min,max){
+        const c=Math.max(min,Math.min(max,v));
+        return ((c-min)/(max-min))*180;
+    }
+    function angleToRotate(angleDeg){ return angleDeg-90; }
+
+    function buildGaugeSkeleton(min,max,zones){
+        const cx=GAUGE_CX, cy=GAUGE_CY, r=GAUGE_R;
+        let svg='';
+        svg += '<path d="'+arcPath(cx,cy,r,0,180)+'" stroke="#242c38" stroke-width="14" fill="none" stroke-linecap="round"/>';
+        zones.forEach(z=>{
+            const a1=valToAngle(z.from,min,max), a2=valToAngle(z.to,min,max);
+            svg += '<path d="'+arcPath(cx,cy,r,a1,a2)+'" stroke="'+z.color+'" stroke-width="14" fill="none" stroke-linecap="butt"/>';
+            if(z.label){
+                const mid=(a1+a2)/2;
+                const p=polar(cx,cy,r,mid);
+                svg += '<text x="'+p.x+'" y="'+p.y+'" font-size="7" font-weight="700" fill="#ffffff" stroke="#0d1117" stroke-width="2.2" paint-order="stroke" text-anchor="middle" dominant-baseline="middle">'+z.label+'</text>';
+            }
+        });
+        svg += '<text x="'+(cx-r-2)+'" y="'+(cy+16)+'" font-size="9" fill="#8b949e">'+min+'</text>';
+        svg += '<text x="'+(cx+r-10)+'" y="'+(cy+16)+'" font-size="9" fill="#8b949e">'+max+'</text>';
+        svg += '<g class="needle-main" id="__NEEDLE1__"><line x1="'+cx+'" y1="'+cy+'" x2="'+cx+'" y2="'+(cy-(r-18))+'" stroke="#e6edf3" stroke-width="2.5" stroke-linecap="round"/></g>';
+        svg += '<circle cx="'+cx+'" cy="'+cy+'" r="4.5" fill="#e6edf3"/>';
+        return svg;
+    }
+    let gaugesInit=false;
+    function initGauges(){
+        const tempZones=[
+            {from:-10,to:COMFORT_T_MIN,color:'#58a6ff',label:'Freddo'},
+            {from:COMFORT_T_MIN,to:COMFORT_T_MAX,color:'#3fb950',label:'Comfort'},
+            {from:COMFORT_T_MAX,to:40,color:'#f85149',label:'Caldo'}
+        ];
+        const humZones=[
+            {from:0,to:COMFORT_RH_MIN,color:'#d29922',label:'Secca'},
+            {from:COMFORT_RH_MIN,to:COMFORT_RH_MAX,color:'#3fb950',label:'Comfort'},
+            {from:COMFORT_RH_MAX,to:100,color:'#f85149',label:'Afosa'}
+        ];
+        let tSvg = buildGaugeSkeleton(-10,40,tempZones);
+        tSvg = tSvg.replace('__NEEDLE1__','needleTempMain');
+        el('gaugeTemp').innerHTML = tSvg;
+        let hSvg = buildGaugeSkeleton(0,100,humZones);
+        hSvg = hSvg.replace('__NEEDLE1__','needleHumMain');
+        el('gaugeHum').innerHTML = hSvg;
+        gaugesInit=true;
+    }
+    function setNeedle(id,deg){
+        const g=el(id);
+        if(g) g.setAttribute('transform','rotate('+deg+' '+GAUGE_CX+' '+GAUGE_CY+')');
+    }
+    function drawGauges(t,rh,hx){
+        if(!gaugesInit) initGauges();
+        if(!isNaN(t)) setNeedle('needleTempMain', angleToRotate(valToAngle(t,-10,40)));
+        if(!isNaN(rh)) setNeedle('needleHumMain', angleToRotate(valToAngle(rh,0,100)));
+        el('gaugeTempValue').textContent = fmt(t)+' °C';
+        el('gaugeHumValue').textContent = fmt(rh)+' %';
+        // Banner dinamico: compare SOLO quando l'Humidex supera i 35°C
+        const noteEl = el('gaugeHumidexNote');
+        if(!isNaN(hx) && hx>35){
+            const estremo = hx>=40;
+            noteEl.textContent = '⚠ Humidex '+fmt(hx)+'°C — '+(estremo
+                ? 'Estremo Disagio / Rischio Colpo di Calore (soglia: >40°C)'
+                : 'Disagio percepibile per l\'afa (soglia estrema: >40°C)');
+            noteEl.className = 'gauge-note warn';
+            noteEl.style.display = '';
+        } else {
+            noteEl.style.display = 'none';
+        }
+    }
+
+    // ─── Live: dati Casa + confronto col Tetto ───
+    let ultimoTetto = null;
+    function fetchTettoLive(){
+        const url='https://api.thingspeak.com/channels/'+TS_CH_TETTO+'/feeds.json?api_key='+TS_RKEY_TETTO+'&results=5&_v='+CACHE_VER;
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(data && data.feeds && data.feeds.length) ultimoTetto = median(data.feeds.map(f=>parseFloat(f.field1)));
+        }).catch(e=>console.warn('[tetto live]',e));
+    }
+
+    function aggiornaDelta(tCasa){
+        const dEl = el('deltaText'), lEl = el('deltaLabel');
+        if(ultimoTetto===null || isNaN(tCasa)){ lEl.textContent='In attesa dati...'; return; }
+        const delta = tCasa - ultimoTetto;
+        const abs = Math.abs(delta).toFixed(2);
+        lEl.textContent = 'Dentro casa e fuori (Tetto) adesso';
+        if(delta > 0.3){ dEl.textContent = 'Dentro fa più caldo di '+abs+'°C rispetto al Tetto'; }
+        else if(delta < -0.3){ dEl.textContent = 'Dentro fa più fresco di '+abs+'°C rispetto al Tetto'; }
+        else { dEl.textContent = 'Temperatura dentro e fuori quasi uguale (±0.30°C)'; }
+    }
+
+    function median(arr){ const s=arr.filter(v=>!isNaN(v)).sort((a,b)=>a-b); if(!s.length) return NaN; const m=Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2; }
+
+    // ─── Badge di variazione temporale (tendenza 1h), stile dashboard Tetto ───
+    function computeTrend(feeds, field){
+        if(!feeds || feeds.length<2) return null;
+        const vals = feeds.map(f=>parseFloat(f['field'+field])).filter(v=>!isNaN(v));
+        if(vals.length<2) return null;
+        const firstWin = vals.slice(0, Math.min(3,vals.length));
+        const lastWin = vals.slice(-Math.min(3,vals.length));
+        return median(lastWin) - median(firstWin);
+    }
+    function computeTrendHumidex(feeds){
+        if(!feeds || feeds.length<2) return null;
+        const vals = feeds.map(f=>{
+            const t=parseFloat(f['field'+FIELD.temp]), h=parseFloat(f['field'+FIELD.hum]);
+            if(isNaN(t)||isNaN(h)) return null;
+            const hx=calcHumidex(t,h);
+            return isNaN(hx)?null:hx;
+        }).filter(v=>v!==null);
+        if(vals.length<2) return null;
+        const firstWin = vals.slice(0, Math.min(3,vals.length));
+        const lastWin = vals.slice(-Math.min(3,vals.length));
+        return median(lastWin) - median(firstWin);
+    }
+    function applyTrendBadge(elId, delta, unit, decimals){
+        const e=el(elId);
+        if(delta===null || isNaN(delta)){ e.textContent='-- (1h)'; e.className='trend flat'; return; }
+        const sign = delta>0?'+':'';
+        e.textContent = sign+delta.toFixed(decimals)+unit+' (1h)';
+        e.className = 'trend '+(delta>0.01?'up':delta<-0.01?'down':'flat');
+    }
+    function fetchTrend(){
+        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'minutes=65&_v='+CACHE_VER;
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(!data||!data.feeds||!data.feeds.length) return;
+            const feeds=data.feeds;
+            const fieldP = pressMode==='slm' ? FIELD.pSlm : FIELD.pRaw;
+            applyTrendBadge('trendTemp', computeTrend(feeds,FIELD.temp), '°C', 2);
+            applyTrendBadge('trendHum', computeTrend(feeds,FIELD.hum), '%', 2);
+            applyTrendBadge('trendHx', computeTrendHumidex(feeds), '°C', 2);
+            applyTrendBadge('trendPress', computeTrend(feeds,fieldP), ' hPa', 2);
+        }).catch(e=>console.warn('[casa trend]',e));
+    }
+    function fetchLive(){
+        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'results=5&_v='+CACHE_VER;
+        fetch(url).then(r=>r.json()).then(data=>{
+            if(!data||!data.feeds||!data.feeds.length) return;
+            const feeds=data.feeds;
+            const last=feeds[feeds.length-1];
+            const t = median(feeds.map(f=>parseFloat(f['field'+FIELD.temp])));
+            const h = median(feeds.map(f=>parseFloat(f['field'+FIELD.hum])));
+            lastRaw = median(feeds.map(f=>parseFloat(f['field'+FIELD.pRaw])));
+            lastSlm = median(feeds.map(f=>parseFloat(f['field'+FIELD.pSlm])));
+            el('P').textContent = fmt(pressMode==='slm' ? lastSlm : lastRaw);
+            if(last.created_at){
+                const ago = Math.round((Date.now()-new Date(last.created_at).getTime())/60000);
+                el('updAgo').textContent = ago+' min';
+            }
+            aggiornaDelta(t);
+            updateDerivedMetrics(t,h);
+        }).catch(e=>console.warn('[casa live]',e));
+    }
+
+    // ─── Estremi mese/anno: risoluzione 10 min, con retry e richieste in sequenza ───
+    function fetchChunkRaw(start,end,aggMin,attempt){
+        attempt = attempt || 0;
+        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'start='+start.toISOString()+'&end='+end.toISOString()+(aggMin?'&median='+aggMin:'')+'&_v='+CACHE_VER;
+        return fetch(url).then(r=>r.json()).then(d=>{
+            const feeds = (d && Array.isArray(d.feeds)) ? d.feeds : null;
+            if(feeds===null || feeds.length===0){
+                if(attempt<3){
+                    console.warn('[casa chunk RETRY]',start.toISOString(),'->',end.toISOString(),'feeds=',feeds?feeds.length:'null');
+                    return sleep(800*(attempt+1)).then(()=>fetchChunkRaw(start,end,aggMin,attempt+1));
+                }
+                console.warn('[casa chunk EMPTY]',start.toISOString(),'->',end.toISOString(),'dopo 3 retry');
+                return [];
+            }
+            return feeds;
+        }).catch(e=>{
+            if(attempt<3) return sleep(800*(attempt+1)).then(()=>fetchChunkRaw(start,end,aggMin,attempt+1));
+            console.warn('[casa chunk fallito]',start,end,e);
+            return [];
+        });
+    }
+    function fetchRangeSeq(totalStart,totalEnd,aggMin,chunkDays){
+        const ranges=[];
+        let cursor=new Date(totalStart);
+        while(cursor<totalEnd){
+            let chunkEnd=new Date(cursor); chunkEnd.setDate(chunkEnd.getDate()+chunkDays);
+            if(chunkEnd>totalEnd) chunkEnd=new Date(totalEnd);
+            ranges.push([new Date(cursor),chunkEnd]);
+            cursor=chunkEnd;
+        }
+        let results=[];
+        return ranges.reduce((p,r,i)=>p.then(()=>fetchChunkRaw(r[0],r[1],aggMin).then(f=>{
+            results.push(f);
+            return i<ranges.length-1 ? sleep(400) : Promise.resolve();
+        })),Promise.resolve())
+            .then(()=>{
+                const merged=[].concat.apply([],results);
+                merged.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+                const seen={};
+                return merged.filter(f=>{ if(seen[f.created_at])return false; seen[f.created_at]=true; return true; });
+            });
+    }
+    function calcExtremes(feeds,field){
+        let mn=Infinity,mx=-Infinity,mnDt='',mxDt='';
+        feeds.forEach(f=>{
+            const v=parseFloat(f['field'+field]);
+            if(isNaN(v)) return;
+            const dt=tsDateToLocal(f.created_at);
+            if(v<mn){ mn=v; mnDt=dt; }
+            if(v>mx){ mx=v; mxDt=dt; }
+        });
+        return {mn:mn===Infinity?null:mn, mx:mx===-Infinity?null:mx, mnDt, mxDt};
+    }
+    function calcExtremesHumidex(feeds){
+        let mn=Infinity,mx=-Infinity,mnDt='',mxDt='';
+        feeds.forEach(f=>{
+            const t=parseFloat(f['field'+FIELD.temp]), h=parseFloat(f['field'+FIELD.hum]);
+            if(isNaN(t)||isNaN(h)) return;
+            const v=calcHumidex(t,h);
+            if(isNaN(v)) return;
+            const dt=tsDateToLocal(f.created_at);
+            if(v<mn){ mn=v; mnDt=dt; }
+            if(v>mx){ mx=v; mxDt=dt; }
+        });
+        return {mn:mn===Infinity?null:mn, mx:mx===-Infinity?null:mx, mnDt, mxDt};
+    }
+    function setExt(prefix,r,target){
+        if(r.mn!==null){ el(target+prefix+'Mn_v').textContent='▼ '+r.mn.toFixed(2); el(target+prefix+'Mn_t').textContent=r.mnDt; }
+        if(r.mx!==null){ el(target+prefix+'Mx_v').textContent='▲ '+r.mx.toFixed(2); el(target+prefix+'Mx_t').textContent=r.mxDt; }
+    }
+    let monthDone=false, yearDone=false;
+    function fetchMonth(){
+        if(monthDone) return;
+        const now=new Date();
+        // Mai prima dell'inizio dei dati della stazione
+        const start=new Date(Math.max(new Date(now.getFullYear(), now.getMonth(), 1).getTime(), DATA_INIZIO.getTime()));
+        fetchRangeSeq(start, now, 10, 15).then(feeds=>{
+            if(feeds.length){
+                setExt('Mo', calcExtremes(feeds,FIELD.temp), 't');
+                setExt('Mo', calcExtremes(feeds,FIELD.hum), 'h');
+                setExt('Mo', calcExtremesHumidex(feeds), 'hx');
+                monthDone=true;
+            }
+        });
+    }
+    function fetchYear(){
+        if(yearDone) return;
+        const now=new Date();
+        // Dal 1 gennaio dell'anno corrente, ma mai prima dell'inizio dei dati
+        const start=new Date(Math.max(new Date(now.getFullYear(),0,1).getTime(), DATA_INIZIO.getTime()));
+        fetchRangeSeq(start, now, 10, 50).then(feeds=>{
+            if(feeds.length){
+                setExt('Yr', calcExtremes(feeds,FIELD.temp), 't');
+                setExt('Yr', calcExtremes(feeds,FIELD.hum), 'h');
+                setExt('Yr', calcExtremesHumidex(feeds), 'hx');
+                yearDone=true;
+            }
+        });
+    }
+
+    // ─── Grafici (24h / 7d / 30d / anno) ───
+    let period='24h';
+    let charts={};
+    let overlayOn=false;
+    let deltaChartOn=false;
+    let lastCasaFeeds=[];
+    let lastTettoFeeds=[];
+    function setPeriod(p){
+        period=p;
+        el('btn24h').classList.toggle('active',p==='24h');
+        el('btn7d').classList.toggle('active',p==='7d');
+        el('btn30d').classList.toggle('active',p==='30d');
+        el('btnAnno').classList.toggle('active',p==='anno');
+        loadCharts(p);
+    }
+    function onOverlayToggle(){
+        overlayOn = el('overlayToggle').checked;
+        loadCharts(period);
+    }
+    // ─── Tab/pulsante dedicato per il grafico del delta termico Casa-Tetto ───
+    function toggleDeltaChart(){
+        deltaChartOn = !deltaChartOn;
+        el('btnDelta').classList.toggle('active', deltaChartOn);
+        el('deltaChartBox').style.display = deltaChartOn ? '' : 'none';
+        if(deltaChartOn) loadDeltaChart(lastCasaFeeds.length ? lastCasaFeeds : undefined);
+    }
+    function rangeParams(p){
+        const end=new Date(); let start=new Date(); let aggMin=null, chunkDays=4;
+        if(p==='24h'){ start.setHours(start.getHours()-24); aggMin=null; }
+        else if(p==='7d'){ start.setDate(start.getDate()-7); aggMin=10; }
+        else if(p==='30d'){ start.setDate(start.getDate()-30); aggMin=60; }
+        else if(p==='anno'){
+            start.setFullYear(start.getFullYear()-1); aggMin=720; chunkDays=30;
+        }
+        // Mai prima dell'inizio dei dati: evita richieste a mesi vuoti e retry inutili
+        if(start<DATA_INIZIO) start=new Date(DATA_INIZIO);
+        return {start,end,aggMin,chunkDays};
+    }
+    // Distanza massima (in ms) tra due campioni consecutivi perché la linea
+    // resti unita. Oltre questa soglia il grafico mostra un'interruzione
+    // (buco reale di dati) invece di una retta che sembra una tendenza.
+    function gapMs(p){
+        if(p==='24h')  return 60*60000;        // dati grezzi: 1 ora
+        if(p==='7d')   return 3*3600000;       // mediana 10 min: 3 ore
+        if(p==='30d')  return 6*3600000;       // mediana 60 min: 6 ore
+        return 36*3600000;                     // anno, mediana 12 h: 36 ore
+    }
+    function fetchTettoChunk(start,end,aggMin,attempt){
+        attempt = attempt || 0;
+        const url='https://api.thingspeak.com/channels/'+TS_CH_TETTO+'/feeds.json?api_key='+TS_RKEY_TETTO+'&start='+start.toISOString()+'&end='+end.toISOString()+(aggMin?'&median='+aggMin:'')+'&_v='+CACHE_VER;
+        return fetch(url).then(r=>r.json()).then(d=>{
+            const feeds = (d && Array.isArray(d.feeds)) ? d.feeds : null;
+            if(feeds===null || feeds.length===0){
+                if(attempt<3) return sleep(800*(attempt+1)).then(()=>fetchTettoChunk(start,end,aggMin,attempt+1));
+                return [];
+            }
+            return feeds;
+        }).catch(()=>{
+            if(attempt<3) return sleep(800*(attempt+1)).then(()=>fetchTettoChunk(start,end,aggMin,attempt+1));
+            return [];
+        });
+    }
+    function fetchTettoRange(start,end,aggMin,chunkDays){
+        const ranges=[]; let cursor=new Date(start);
+        while(cursor<end){ let ce=new Date(cursor); ce.setDate(ce.getDate()+chunkDays); if(ce>end) ce=new Date(end); ranges.push([new Date(cursor),ce]); cursor=ce; }
+        let results=[];
+        return ranges.reduce((p,r,i)=>p.then(()=>fetchTettoChunk(r[0],r[1],aggMin).then(f=>{
+            results.push(f);
+            return i<ranges.length-1 ? sleep(400) : Promise.resolve();
+        })),Promise.resolve()).then(()=>{
+            const merged=[].concat.apply([],results);
+            merged.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+            const seen={};
+            return merged.filter(f=>{ if(seen[f.created_at])return false; seen[f.created_at]=true; return true; });
+        });
+    }
+    function despike(arr, maxJump, half){
+        half = half || 4;
+        const out = arr.slice();
+        for(let i=0;i<arr.length;i++){
+            if(arr[i]===null) continue;
+            const lo=Math.max(0,i-half), hi=Math.min(arr.length-1,i+half);
+            const win=[];
+            for(let j=lo;j<=hi;j++){ if(j!==i && arr[j]!==null) win.push(arr[j]); }
+            if(win.length<5) continue;
+            win.sort((a,b)=>a-b);
+            const med=win[Math.floor(win.length/2)];
+            if(Math.abs(arr[i]-med)>maxJump){ out[i]=null; }
+        }
+        return out;
+    }
+    function seriesFrom(feeds, field, maxJump){
+        const raw = feeds.map(f=>(f['field'+field]===null||f['field'+field]===undefined||f['field'+field]==='')?null:parseFloat(f['field'+field]));
+        const clean = maxJump ? despike(raw, maxJump) : raw;
+        return feeds.map((f,i)=>({x:new Date(f.created_at).getTime(), y: clean[i]===null?null:Number(clean[i].toFixed(2))}));
+    }
+    function humidexSeriesFrom(feeds){
+        const tRaw = feeds.map(f=>(f['field'+FIELD.temp]===null||f['field'+FIELD.temp]===undefined||f['field'+FIELD.temp]==='')?null:parseFloat(f['field'+FIELD.temp]));
+        const hRaw = feeds.map(f=>(f['field'+FIELD.hum]===null||f['field'+FIELD.hum]===undefined||f['field'+FIELD.hum]==='')?null:parseFloat(f['field'+FIELD.hum]));
+        const tClean = despike(tRaw, 2.5);
+        const hClean = hRaw;
+        return feeds.map((f,i)=>{
+            const t=tClean[i], h=hClean[i];
+            const hx = (t===null||h===null) ? null : calcHumidex(t,h);
+            return {x:new Date(f.created_at).getTime(), y: (hx===null||isNaN(hx))?null:Number(hx.toFixed(2))};
+        });
+    }
+    function alignByTimestamp(feedsA, fieldA, feedsB, fieldB, toleranceMs){
+        const bPoints = feedsB.map(f=>({t:new Date(f.created_at).getTime(), v:parseFloat(f['field'+fieldB])})).filter(p=>!isNaN(p.v));
+        bPoints.sort((a,b)=>a.t-b.t);
+        function nearest(t){
+            let lo=0, hi=bPoints.length-1, best=null, bestDiff=Infinity;
+            while(lo<=hi){
+                const mid=(lo+hi)>>1;
+                const diff=Math.abs(bPoints[mid].t-t);
+                if(diff<bestDiff){ bestDiff=diff; best=bPoints[mid]; }
+                if(bPoints[mid].t<t) lo=mid+1; else hi=mid-1;
+            }
+            return (best && bestDiff<=toleranceMs) ? best.v : null;
+        }
+        const out=[];
+        feedsA.forEach(f=>{
+            const va=parseFloat(f['field'+fieldA]);
+            if(isNaN(va)) return;
+            const t=new Date(f.created_at).getTime();
+            const vb=nearest(t);
+            if(vb===null) return;
+            out.push({x:t, y:Number((va-vb).toFixed(2))});
+        });
+        return out;
+    }
+    function loadDeltaChart(casaFeedsParam){
+        const {start,end,aggMin,chunkDays} = rangeParams(period);
+        el('chartStatus').textContent='Caricamento delta...';
+        const casaPromise = casaFeedsParam ? Promise.resolve(casaFeedsParam) : fetchRangeSeq(start,end,aggMin,chunkDays);
+        Promise.all([
+            casaPromise,
+            fetchTettoRange(start,end,aggMin,chunkDays)
+        ]).then(([casaFeeds,tettoFeeds])=>{
+            if(!casaFeeds.length || !tettoFeeds.length){ el('chartStatus').textContent='Nessun dato per il delta'; return; }
+            const tolMs = (period==='24h') ? 15*60000 : (period==='anno' ? 24*3600000 : 3*3600000);
+            const tRawCasa = casaFeeds.map(f=>(f['field'+FIELD.temp]===null||f['field'+FIELD.temp]===undefined||f['field'+FIELD.temp]==='')?null:parseFloat(f['field'+FIELD.temp]));
+            const tCleanCasa = despike(tRawCasa, 2.5);
+            const casaFeedsClean = casaFeeds.map((f,i)=>Object.assign({},f,{['field'+FIELD.temp]: tCleanCasa[i]===null?'':tCleanCasa[i]}));
+            const tRawTetto = tettoFeeds.map(f=>(f.field1===null||f.field1===undefined||f.field1==='')?null:parseFloat(f.field1));
+            const tCleanTetto = despike(tRawTetto, 2.5);
+            const tettoFeedsClean = tettoFeeds.map((f,i)=>Object.assign({},f,{field1: tCleanTetto[i]===null?'':tCleanTetto[i]}));
+            const deltaData = alignByTimestamp(casaFeedsClean, FIELD.temp, tettoFeedsClean, 1, tolMs);
+            makeChart('chartDelta',[{
+                label:'Delta Casa - Tetto',
+                data:deltaData,
+                borderColor:'#e3b341',
+                borderWidth:2,
+                pointRadius:0,
+                pointHoverRadius:6,
+                pointHitRadius:14,
+                spanGaps:gapMs(period),
+                fill:{target:{value:0}},
+                segment:{
+                    backgroundColor:ctx=>{
+                        const y = ctx.p0.parsed.y;
+                        return y>=0 ? 'rgba(227,179,65,0.18)' : 'rgba(88,166,255,0.18)';
+                    }
+                }
+            }],'°C (Casa − Tetto)');
+            el('chartStatus').textContent='Aggiornato: '+deltaData.length+' punti confrontati';
+        }).catch(e=>{ el('chartStatus').textContent='Errore caricamento delta'; console.warn(e); });
+    }
+    function loadCharts(p){
+        el('chartStatus').textContent='Caricamento...';
+        const {start,end,aggMin,chunkDays} = rangeParams(p);
+        const gap = gapMs(p);
+        fetchRangeSeq(start,end,aggMin,chunkDays).then(feeds=>{
+            if(!feeds.length){ el('chartStatus').textContent='Nessun dato'; return; }
+            lastCasaFeeds = feeds;
+            el('chartStatus').textContent='Aggiornato: '+feeds.length+' campioni';
+            const tempDatasets = [
+                {label:'Temperatura Casa',data:seriesFrom(feeds,FIELD.temp,2.5),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHitRadius:14,spanGaps:gap,yAxisID:'y'}
+            ];
+            makeChart('chartH',[{label:'Umidità',data:seriesFrom(feeds,FIELD.hum),borderColor:'#3fb950',borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHitRadius:14,spanGaps:gap}],'%');
+            makeChart('chartHx',[{label:'Humidex (percepita)',data:humidexSeriesFrom(feeds),borderColor:'#e3b341',borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHitRadius:14,spanGaps:gap}],'°C');
+            if(overlayOn){
+                fetchTettoRange(start,end,aggMin,chunkDays).then(tettoFeeds=>{
+                    if(tettoFeeds.length){
+                        tempDatasets.push({label:'Temperatura Tetto',data:seriesFrom(tettoFeeds,FIELD.temp,2.5),borderColor:'#f85149',borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHitRadius:14,spanGaps:gap,borderDash:[4,3],yAxisID:'y'});
+                    }
+                    makeChart('chartT',tempDatasets,'°C');
+                });
+            } else {
+                makeChart('chartT',tempDatasets,'°C');
+            }
+            if(deltaChartOn) loadDeltaChart(feeds);
+        }).catch(e=>{ el('chartStatus').textContent='Errore caricamento'; console.warn(e); });
+    }
+    function makeChart(id,datasets,yLabel,extraScales){
+        const ctx=el(id); if(!ctx) return;
+        const scales={
+            x:{ type:'time', time:{displayFormats:{hour:'HH:mm',day:'dd/MM'}, tooltipFormat:'dd/MM HH:mm'}, ticks:{color:'#8b949e', font:{size:9}, maxTicksLimit:8}, grid:{color:'#1c2430'} },
+            y:{ position:'left', ticks:{color:'#8b949e', font:{size:9}}, grid:{color:'#1c2430'}, title:{display:true, text:yLabel, color:'#8b949e', font:{size:9}} }
+        };
+        if(extraScales) Object.assign(scales, extraScales);
+        const opts={ responsive:true, maintainAspectRatio:false, animation:{duration:300},
+            interaction:{ mode:'index', intersect:false },
+            plugins:{ legend:{ labels:{ color:'#8b949e', font:{size:10}, boxWidth:12, padding:8 } },
+                tooltip:{ callbacks:{ label:function(c){ return c.dataset.label+': '+(c.parsed.y===null?'--':c.parsed.y.toFixed(2)); } } } },
+            scales:scales };
+        if(charts[id]){
+            const currentAxisKeys = Object.keys(charts[id].options.scales||{}).sort().join(',');
+            const newAxisKeys = Object.keys(scales).sort().join(',');
+            if(currentAxisKeys===newAxisKeys){
+                charts[id].data.datasets=datasets;
+                charts[id].options.scales=scales;
+                charts[id].update('none');
+                return;
+            }
+            charts[id].destroy();
+        }
+        charts[id]=new Chart(ctx, { type:'line', data:{datasets}, options:opts });
+    }
+
+    fetchTettoLive(); fetchLive(); fetchTrend(); loadCharts('24h');
+    setTimeout(fetchMonth, 3000);
+    setTimeout(fetchYear, 6000);
+    setInterval(fetchTettoLive, 60000);
+    setInterval(fetchLive, 60000);
+    setInterval(fetchTrend, 60000);
+    setInterval(()=>{ monthDone=false; fetchMonth(); }, 3600000);
+    setInterval(()=>{ yearDone=false; fetchYear(); }, 3600000);
+</script>
+</body>
+</html>
