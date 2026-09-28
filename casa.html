@@ -84,8 +84,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .combo-afoso{background:rgba(227,179,65,.15);color:var(--orn);border:1px solid var(--orn);}
 .combo-caldo{background:rgba(248,81,73,.15);color:var(--red);border:1px solid var(--red);}
 
-/* Legenda soglie sotto i quadranti */
-
 /* Derived metrics grid */
 .mini-grid{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-top:2px;}
 .mini-card{background:var(--bg2);border:1px solid var(--brd);border-radius:10px;padding:9px 11px;}
@@ -220,8 +218,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
                 <div class="info-icon" onclick="toggleInfo()">i</div>
                 <div class="info-pop" id="infoPop">
                     Canale ThingSpeak 3211426: field1=Temperatura, field2=Umidità, field3=Pressione raw (stazione),
-                    field5=Pressione a livello del mare. Estremi mese/anno calcolati a risoluzione 10 min
-                    (stessa del Tetto) per essere confrontabili tra loro.
+                    field5=Pressione a livello del mare. Il grafico Anno parte dal 01/01/2026 e mostra un punto al giorno
+                    (mediana giornaliera). ThingSpeak restituisce al massimo 8000 righe per richiesta: i blocchi
+                    troppo grandi vengono divisi in automatico. Estremi mese/anno a risoluzione 10 min.
                 </div>
             </div>
         </div>
@@ -251,16 +250,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     const TS_CH_TETTO = 3217870, TS_RKEY_TETTO = 'E1WOMQU43G4GNNXI';
     const FIELD = { temp:1, hum:2, pRaw:3, pSlm:5 };
     // Versione cache: incrementarla forza il browser a non riutilizzare risposte
-    // HTTP precedenti (es. dopo aver corretto un buco di dati / bug di fetch).
-    const CACHE_VER = 'v5';
-    // Piccola pausa tra le richieste a chunk in sequenza, per non superare i
-    // limiti di rate di ThingSpeak (che altrimenti scarta/tronca le risposte).
-    function sleep(ms){ return new Promise(res=>setTimeout(res,ms)); }
+    // HTTP precedenti e svuota di fatto la cache locale dei blocchi.
+    const CACHE_VER = 'v7';
+    // Data di inizio dei dati della stazione Casa (prima il canale è vuoto).
+    const DATA_INIZIO = new Date('2026-01-01T00:00:00');
+    // Un blocco viene salvato in cache solo se è chiuso da almeno 36 ore
+    // (i dati vecchi non cambiano più).
+    const CACHE_MIN_AGE = 36*3600000;
+    // Sotto questa durata un blocco non viene più diviso.
+    const MIN_SPLIT_MS = 30*3600000;
 
+    function sleep(ms){ return new Promise(res=>setTimeout(res,ms)); }
     function el(id){ return document.getElementById(id); }
     // Arrotondamento fisso a 2 cifre decimali per tutti i valori numerici/derivati
     function fmt(v,d=2){ return (v===null||v===undefined||isNaN(v))?'--':Number(v).toFixed(d); }
     function tsDateToLocal(ca){ if(!ca||ca.length<16) return ''; const d=new Date(ca); const dd=String(d.getDate()).padStart(2,'0'); const mo=String(d.getMonth()+1).padStart(2,'0'); const hh=String(d.getHours()).padStart(2,'0'); const mm=String(d.getMinutes()).padStart(2,'0'); return dd+'/'+mo+' '+hh+':'+mm; }
+
+    // ─── Cache locale (localStorage), con protezione se non disponibile o piena ───
+    function cacheGet(key){ try{ const s=localStorage.getItem(key); return s?JSON.parse(s):null; }catch(e){ return null; } }
+    function cacheSet(key,val){ try{ localStorage.setItem(key,JSON.stringify(val)); }catch(e){ /* cache piena o non disponibile: si ignora */ } }
 
     function switchTab(btn,prefix,period){
         const tabs=btn.parentElement.querySelectorAll('.ex-tab');
@@ -308,18 +316,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         const e=6.112*Math.pow(10,(7.5*t)/(237.7+t))*(rh/100);
         return t+0.5555*(e-10);
     }
-    // ─── Soglie di comfort UNIFICATE (stessa fonte usata da mini-card, badge
-    // grande, badge di temperatura/umidità e colori dei quadranti):
+    // ─── Soglie di comfort UNIFICATE ───
     // Temperatura: <19 freddo, 19-26.5 confort, >26.5 caldo
-    // Umidità: <35 secca, 35-60 confort, >60 afosa ───
+    // Umidità: <35 secca, 35-60 confort, >60 afosa
     const COMFORT_T_MIN=19, COMFORT_T_MAX=26.5, COMFORT_RH_MIN=35, COMFORT_RH_MAX=60;
-    // Unica funzione di comfort combinato (T + UR + Humidex), usata sia per la
-    // mini-card "Comfort termico" sia per il badge grande sotto i quadranti.
-    // Ordine di valutazione: CALDO AFA > UMIDO/AFOSO > FREDDO > SECCO > OTTIMALE > Nella norma
     function combinedComfort(t,rh,hx){
         if(isNaN(t)||isNaN(rh)) return {label:'--', cls:''};
-        // Soglia allineata ESATTAMENTE a quella del quadrante (COMFORT_T_MAX),
-        // così il badge non può più dire "Nella norma" mentre il quadrante è già rosso.
         if(t>COMFORT_T_MAX || (!isNaN(hx) && hx>=34)) return {label:'Caldo Afa', cls:'combo-caldo'};
         if(t>=COMFORT_T_MAX-2 && t<=COMFORT_T_MAX && rh>COMFORT_RH_MAX) return {label:'Umido / Afoso', cls:'combo-afoso'};
         if(t<COMFORT_T_MIN) return {label:'Freddo', cls:'combo-freddo'};
@@ -356,20 +358,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         const dp=calcDewPoint(t,rh);
         const ah=calcAbsHumidity(t,rh);
         const hx=calcHumidex(t,rh);
-        // La mini-card "Comfort termico" ora usa la STESSA funzione del badge
-        // grande sotto i quadranti (combinedComfort), cosi' danno sempre lo
-        // stesso verdetto sullo stesso dato.
         const combo=combinedComfort(t,rh,hx);
         el('dewPoint').textContent=fmt(dp);
         el('absHum').textContent=fmt(ah);
         el('humidex').textContent=fmt(hx);
         applyBadge('badgeTemp', tempBadge(t));
         applyBadge('badgeHum', humBadge(rh));
-        // Bordo card dinamico
         const cardT=el('cardT'), cardH=el('cardH'), cardHx=el('cardHx');
         cardT.style.borderColor = t>COMFORT_T_MAX?'var(--red)': t<COMFORT_T_MIN?'var(--acc)':'var(--brd)';
         cardH.style.borderColor = rh>COMFORT_RH_MAX?'var(--red)': rh<COMFORT_RH_MIN?'var(--ylw)': (rh>=COMFORT_RH_MIN&&rh<=COMFORT_RH_MAX)?'var(--grn)':'var(--brd)';
-        // Card Temperatura Percepita (Humidex): valore live + badge di disagio
         el('Hx').textContent = fmt(hx);
         applyBadge('badgeHx', humidexBadge(hx));
         cardHx.style.borderColor = hx>=40?'var(--red)': hx>=34?'var(--orn)': 'var(--brd)';
@@ -403,8 +400,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         zones.forEach(z=>{
             const a1=valToAngle(z.from,min,max), a2=valToAngle(z.to,min,max);
             svg += '<path d="'+arcPath(cx,cy,r,a1,a2)+'" stroke="'+z.color+'" stroke-width="14" fill="none" stroke-linecap="butt"/>';
-            // Etichetta di stato dentro il settore colorato (al centro dell'arco),
-            // con un contorno scuro (stroke) per restare leggibile su ogni colore.
             if(z.label){
                 const mid=(a1+a2)/2;
                 const p=polar(cx,cy,r,mid);
@@ -447,8 +442,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         if(!isNaN(rh)) setNeedle('needleHumMain', angleToRotate(valToAngle(rh,0,100)));
         el('gaugeTempValue').textContent = fmt(t)+' °C';
         el('gaugeHumValue').textContent = fmt(rh)+' %';
-        // Banner dinamico: compare SOLO quando l'Humidex supera i 35°C
-        // (fascia "Percepibile" e oltre), altrimenti resta nascosto del tutto.
         const noteEl = el('gaugeHumidexNote');
         if(!isNaN(hx) && hx>35){
             const estremo = hx>=40;
@@ -545,48 +538,91 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         }).catch(e=>console.warn('[casa live]',e));
     }
 
-    // ─── Estremi mese/anno: risoluzione 10 min, con retry e richieste in sequenza ───
-    function fetchChunkRaw(start,end,aggMin,attempt){
+    // ═══ Accesso storico a ThingSpeak ═══
+    // ThingSpeak restituisce al massimo 8000 righe GREZZE per richiesta e, se
+    // l'intervallo ne contiene di più, tiene solo le ultime senza dare errore.
+    // Da quando la stazione manda un dato al minuto, 8000 righe = ~5,5 giorni.
+    // Per questo ogni blocco viene controllato: se il primo dato arriva molto
+    // dopo l'inizio del blocco, il blocco è stato troncato e lo divido a metà
+    // (fino a ~1 giorno). Nei mesi a un dato all'ora i blocchi restano grandi.
+
+    // Una singola richiesta, con retry. Risposta vuota: 1 solo nuovo tentativo.
+    function tsFetch(ch,rkey,start,end,aggMin,attempt){
         attempt = attempt || 0;
-        const url='https://api.thingspeak.com/channels/'+TS_CH_CASA+'/feeds.json?'+(TS_RKEY_CASA?'api_key='+TS_RKEY_CASA+'&':'')+'start='+start.toISOString()+'&end='+end.toISOString()+(aggMin?'&median='+aggMin:'')+'&_v='+CACHE_VER;
-        return fetch(url).then(r=>r.json()).then(d=>{
+        const url='https://api.thingspeak.com/channels/'+ch+'/feeds.json?'+(rkey?'api_key='+rkey+'&':'')+'start='+start.toISOString()+'&end='+end.toISOString()+(aggMin?'&median='+aggMin:'')+'&_v='+CACHE_VER;
+        return fetch(url).then(r=>{
+            if(!r.ok) throw new Error('HTTP '+r.status);
+            return r.json();
+        }).then(d=>{
             const feeds = (d && Array.isArray(d.feeds)) ? d.feeds : null;
-            if(feeds===null || feeds.length===0){
-                if(attempt<3){
-                    console.warn('[casa chunk RETRY]',start.toISOString(),'->',end.toISOString(),'feeds=',feeds?feeds.length:'null');
-                    return sleep(800*(attempt+1)).then(()=>fetchChunkRaw(start,end,aggMin,attempt+1));
-                }
-                console.warn('[casa chunk EMPTY]',start.toISOString(),'->',end.toISOString(),'dopo 3 retry');
+            if(!feeds || feeds.length===0){
+                if(attempt<1) return sleep(1200).then(()=>tsFetch(ch,rkey,start,end,aggMin,attempt+1));
                 return [];
             }
             return feeds;
         }).catch(e=>{
-            if(attempt<3) return sleep(800*(attempt+1)).then(()=>fetchChunkRaw(start,end,aggMin,attempt+1));
-            console.warn('[casa chunk fallito]',start,end,e);
+            if(attempt<3) return sleep(1500*(attempt+1)).then(()=>tsFetch(ch,rkey,start,end,aggMin,attempt+1));
+            console.warn('[ts fetch fallito]',ch,start.toISOString(),end.toISOString(),e);
             return [];
         });
     }
-    function fetchRangeSeq(totalStart,totalEnd,aggMin,chunkDays){
-        const ranges=[];
-        let cursor=new Date(totalStart);
-        while(cursor<totalEnd){
-            let chunkEnd=new Date(cursor); chunkEnd.setDate(chunkEnd.getDate()+chunkDays);
-            if(chunkEnd>totalEnd) chunkEnd=new Date(totalEnd);
-            ranges.push([new Date(cursor),chunkEnd]);
-            cursor=chunkEnd;
-        }
-        let results=[];
-        return ranges.reduce((p,r,i)=>p.then(()=>fetchChunkRaw(r[0],r[1],aggMin).then(f=>{
-            results.push(f);
-            return i<ranges.length-1 ? sleep(400) : Promise.resolve();
-        })),Promise.resolve())
-            .then(()=>{
-                const merged=[].concat.apply([],results);
-                merged.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
-                const seen={};
-                return merged.filter(f=>{ if(seen[f.created_at])return false; seen[f.created_at]=true; return true; });
-            });
+    // Un blocco, diviso a metà se risulta troncato.
+    function tsChunk(ch,rkey,s,e,aggMin){
+        return tsFetch(ch,rkey,s,e,aggMin).then(feeds=>{
+            if(!feeds.length) return feeds;
+            const len = e.getTime()-s.getTime();
+            const tol = Math.max((aggMin||0)*60000*1.5, 2*3600000);
+            const first = new Date(feeds[0].created_at).getTime();
+            if(len>MIN_SPLIT_MS && (first-s.getTime())>tol){
+                const mid = new Date(s.getTime()+len/2);
+                console.warn('[blocco troncato, lo divido]',s.toISOString(),'->',e.toISOString());
+                return sleep(300)
+                    .then(()=>tsChunk(ch,rkey,s,mid,aggMin))
+                    .then(a=>sleep(300).then(()=>tsChunk(ch,rkey,mid,e,aggMin)).then(b=>a.concat(b)));
+            }
+            return feeds;
+        });
     }
+    function makeRanges(start,end,chunkDays){
+        const ranges=[]; let cursor=new Date(start);
+        while(cursor<end){
+            let ce=new Date(cursor); ce.setDate(ce.getDate()+chunkDays);
+            if(ce>end) ce=new Date(end);
+            ranges.push([new Date(cursor),ce]);
+            cursor=ce;
+        }
+        return ranges;
+    }
+    // Tiene solo i campi che servono ai grafici (cache più leggera)
+    function slim(f){ return {created_at:f.created_at, field1:f.field1, field2:f.field2}; }
+    // Scarica un intervallo a blocchi in sequenza; i blocchi passati e completi
+    // vengono salvati in cache locale (solo se cacheRows).
+    function tsRange(ch,rkey,start,end,aggMin,chunkDays,cacheRows,progress){
+        const ranges = makeRanges(start,end,chunkDays);
+        const results=[];
+        return ranges.reduce((p,r,i)=>p.then(()=>{
+            if(progress) progress(i,ranges.length);
+            const key='ts_'+CACHE_VER+'_'+ch+'_'+(aggMin||0)+'_'+r[0].getTime()+'_'+r[1].getTime();
+            const cacheable = cacheRows && r[1].getTime() < Date.now()-CACHE_MIN_AGE;
+            if(cacheable){
+                const c=cacheGet(key);
+                if(c){ results.push(c); return null; }
+            }
+            return tsChunk(ch,rkey,r[0],r[1],aggMin).then(f=>{
+                const sl=f.map(slim);
+                results.push(sl);
+                if(cacheable && sl.length) cacheSet(key,sl);
+                return i<ranges.length-1 ? sleep(300) : null;
+            });
+        }),Promise.resolve()).then(()=>{
+            const merged=[].concat.apply([],results);
+            merged.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+            const seen={};
+            return merged.filter(f=>{ if(seen[f.created_at]) return false; seen[f.created_at]=true; return true; });
+        });
+    }
+
+    // ─── Estremi mese/anno: risoluzione 10 min, calcolati per blocco e messi in cache ───
     function calcExtremes(feeds,field){
         let mn=Infinity,mx=-Infinity,mnDt='',mxDt='';
         feeds.forEach(f=>{
@@ -611,34 +647,68 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         });
         return {mn:mn===Infinity?null:mn, mx:mx===-Infinity?null:mx, mnDt, mxDt};
     }
+    function mergeExt(a,b){
+        if(!a) return b;
+        if(!b) return a;
+        const o={mn:a.mn,mnDt:a.mnDt,mx:a.mx,mxDt:a.mxDt};
+        if(b.mn!==null && (o.mn===null || b.mn<o.mn)){ o.mn=b.mn; o.mnDt=b.mnDt; }
+        if(b.mx!==null && (o.mx===null || b.mx>o.mx)){ o.mx=b.mx; o.mxDt=b.mxDt; }
+        return o;
+    }
+    function mergeAll(a,b){ return {t:mergeExt(a.t,b.t), h:mergeExt(a.h,b.h), hx:mergeExt(a.hx,b.hx)}; }
     function setExt(prefix,r,target){
+        if(!r) return;
         if(r.mn!==null){ el(target+prefix+'Mn_v').textContent='▼ '+r.mn.toFixed(2); el(target+prefix+'Mn_t').textContent=r.mnDt; }
         if(r.mx!==null){ el(target+prefix+'Mx_v').textContent='▲ '+r.mx.toFixed(2); el(target+prefix+'Mx_t').textContent=r.mxDt; }
     }
-    let monthDone=false, yearDone=false;
-    function fetchMonth(){
-        if(monthDone) return;
-        const now=new Date(); const start=new Date(now.getFullYear(), now.getMonth(), 1);
-        fetchRangeSeq(start, now, 10, 15).then(feeds=>{
-            if(feeds.length){
-                setExt('Mo', calcExtremes(feeds,FIELD.temp), 't');
-                setExt('Mo', calcExtremes(feeds,FIELD.hum), 'h');
-                setExt('Mo', calcExtremesHumidex(feeds), 'hx');
-                monthDone=true;
+    function setExtAll(prefix,acc){
+        setExt(prefix,acc.t,'t');
+        setExt(prefix,acc.h,'h');
+        setExt(prefix,acc.hx,'hx');
+    }
+    function extremesRange(start,end,chunkDays,onPartial){
+        const ranges = makeRanges(start,end,chunkDays);
+        let acc={t:null,h:null,hx:null};
+        return ranges.reduce((p,r)=>p.then(()=>{
+            const key='ex_'+CACHE_VER+'_'+r[0].getTime()+'_'+r[1].getTime();
+            const cacheable = r[1].getTime() < Date.now()-CACHE_MIN_AGE;
+            if(cacheable){
+                const c=cacheGet(key);
+                if(c){ acc=mergeAll(acc,c); onPartial(acc); return null; }
             }
+            return tsChunk(TS_CH_CASA,TS_RKEY_CASA,r[0],r[1],10).then(feeds=>{
+                if(feeds.length){
+                    const c={t:calcExtremes(feeds,FIELD.temp), h:calcExtremes(feeds,FIELD.hum), hx:calcExtremesHumidex(feeds)};
+                    if(cacheable) cacheSet(key,c);
+                    acc=mergeAll(acc,c);
+                    onPartial(acc);
+                }
+                return sleep(300);
+            });
+        }),Promise.resolve()).then(()=>acc);
+    }
+    let monthDone=false, yearDone=false, extBusy=false;
+    function fetchMonth(){
+        if(monthDone) return Promise.resolve();
+        const now=new Date();
+        const start=new Date(Math.max(new Date(now.getFullYear(), now.getMonth(), 1).getTime(), DATA_INIZIO.getTime()));
+        return extremesRange(start, now, 10, acc=>setExtAll('Mo',acc)).then(acc=>{
+            if(acc.t && acc.t.mn!==null) monthDone=true;
         });
     }
     function fetchYear(){
-        if(yearDone) return;
-        const now=new Date(); const start=new Date(now.getFullYear(),0,1);
-        fetchRangeSeq(start, now, 10, 50).then(feeds=>{
-            if(feeds.length){
-                setExt('Yr', calcExtremes(feeds,FIELD.temp), 't');
-                setExt('Yr', calcExtremes(feeds,FIELD.hum), 'h');
-                setExt('Yr', calcExtremesHumidex(feeds), 'hx');
-                yearDone=true;
-            }
+        if(yearDone) return Promise.resolve();
+        const now=new Date();
+        const start=new Date(Math.max(new Date(now.getFullYear(),0,1).getTime(), DATA_INIZIO.getTime()));
+        return extremesRange(start, now, 10, acc=>setExtAll('Yr',acc)).then(acc=>{
+            if(acc.t && acc.t.mn!==null) yearDone=true;
         });
+    }
+    // Mese e Anno in sequenza (mai insieme ai grafici o tra loro)
+    function runExtremes(){
+        if(extBusy) return;
+        extBusy=true;
+        fetchMonth().then(fetchYear).catch(e=>console.warn('[estremi]',e)).then(()=>{ extBusy=false; });
     }
 
     // ─── Grafici (24h / 7d / 30d / anno) ───
@@ -647,7 +717,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     let overlayOn=false;
     let deltaChartOn=false;
     let lastCasaFeeds=[];
-    let lastTettoFeeds=[];
+    let loadToken=0;
     function setPeriod(p){
         period=p;
         el('btn24h').classList.toggle('active',p==='24h');
@@ -660,51 +730,44 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         overlayOn = el('overlayToggle').checked;
         loadCharts(period);
     }
-    // ─── Tab/pulsante dedicato per il grafico del delta termico Casa-Tetto ───
     function toggleDeltaChart(){
         deltaChartOn = !deltaChartOn;
         el('btnDelta').classList.toggle('active', deltaChartOn);
         el('deltaChartBox').style.display = deltaChartOn ? '' : 'none';
-        // Se i dati Casa per il periodo corrente sono già stati scaricati
-        // (lastCasaFeeds), li riuso invece di rifare la stessa richiesta.
         if(deltaChartOn) loadDeltaChart(lastCasaFeeds.length ? lastCasaFeeds : undefined);
     }
     function rangeParams(p){
-        const end=new Date(); let start=new Date(); let aggMin=null, chunkDays=4;
+        const end=new Date(); let start=new Date(); let aggMin=null, chunkDays=4, cacheRows=false;
         if(p==='24h'){ start.setHours(start.getHours()-24); aggMin=null; }
         else if(p==='7d'){ start.setDate(start.getDate()-7); aggMin=10; }
         else if(p==='30d'){ start.setDate(start.getDate()-30); aggMin=60; }
-        else if(p==='anno'){ start.setFullYear(start.getFullYear()-1); aggMin=720; chunkDays=30; }
-        return {start,end,aggMin,chunkDays};
+        else if(p==='anno'){
+            start.setFullYear(start.getFullYear()-1);
+            aggMin=1440;      // un punto al giorno (mediana giornaliera)
+            chunkDays=10;
+            cacheRows=true;
+        }
+        if(start<DATA_INIZIO) start=new Date(DATA_INIZIO);
+        return {start,end,aggMin,chunkDays,cacheRows};
     }
-    function fetchTettoChunk(start,end,aggMin,attempt){
-        attempt = attempt || 0;
-        const url='https://api.thingspeak.com/channels/'+TS_CH_TETTO+'/feeds.json?api_key='+TS_RKEY_TETTO+'&start='+start.toISOString()+'&end='+end.toISOString()+(aggMin?'&median='+aggMin:'')+'&_v='+CACHE_VER;
-        return fetch(url).then(r=>r.json()).then(d=>{
-            const feeds = (d && Array.isArray(d.feeds)) ? d.feeds : null;
-            if(feeds===null || feeds.length===0){
-                if(attempt<3) return sleep(800*(attempt+1)).then(()=>fetchTettoChunk(start,end,aggMin,attempt+1));
-                return [];
-            }
-            return feeds;
-        }).catch(()=>{
-            if(attempt<3) return sleep(800*(attempt+1)).then(()=>fetchTettoChunk(start,end,aggMin,attempt+1));
-            return [];
-        });
+    // Distanza massima tra due campioni perché la linea resti unita
+    function gapMs(p){
+        if(p==='24h')  return 60*60000;
+        if(p==='7d')   return 3*3600000;
+        if(p==='30d')  return 6*3600000;
+        return 72*3600000;
     }
-    function fetchTettoRange(start,end,aggMin,chunkDays){
-        const ranges=[]; let cursor=new Date(start);
-        while(cursor<end){ let ce=new Date(cursor); ce.setDate(ce.getDate()+chunkDays); if(ce>end) ce=new Date(end); ranges.push([new Date(cursor),ce]); cursor=ce; }
-        let results=[];
-        return ranges.reduce((p,r,i)=>p.then(()=>fetchTettoChunk(r[0],r[1],aggMin).then(f=>{
-            results.push(f);
-            return i<ranges.length-1 ? sleep(400) : Promise.resolve();
-        })),Promise.resolve()).then(()=>{
-            const merged=[].concat.apply([],results);
-            merged.sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
-            const seen={};
-            return merged.filter(f=>{ if(seen[f.created_at])return false; seen[f.created_at]=true; return true; });
-        });
+    // Filtro anti-glitch: sui dati giornalieri (Anno) è già robusto per la mediana
+    function spikeJump(p){ return p==='anno' ? 0 : 2.5; }
+    // Aspetto linee: più sottili e con curva morbida sul grafico Anno
+    function lineOpts(p,color,gap){
+        return {
+            borderColor:color,
+            borderWidth:(p==='anno' ? 1.5 : 2),
+            pointRadius:0, pointHoverRadius:6, pointHitRadius:14,
+            spanGaps:gap,
+            cubicInterpolationMode:(p==='anno' ? 'monotone' : 'default')
+        };
     }
     function despike(arr, maxJump, half){
         half = half || 4;
@@ -726,10 +789,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         const clean = maxJump ? despike(raw, maxJump) : raw;
         return feeds.map((f,i)=>({x:new Date(f.created_at).getTime(), y: clean[i]===null?null:Number(clean[i].toFixed(2))}));
     }
-    function humidexSeriesFrom(feeds){
+    function humidexSeriesFrom(feeds, jump){
         const tRaw = feeds.map(f=>(f['field'+FIELD.temp]===null||f['field'+FIELD.temp]===undefined||f['field'+FIELD.temp]==='')?null:parseFloat(f['field'+FIELD.temp]));
         const hRaw = feeds.map(f=>(f['field'+FIELD.hum]===null||f['field'+FIELD.hum]===undefined||f['field'+FIELD.hum]==='')?null:parseFloat(f['field'+FIELD.hum]));
-        const tClean = despike(tRaw, 2.5);
+        const tClean = jump ? despike(tRaw, jump) : tRaw;
         const hClean = hRaw;
         return feeds.map((f,i)=>{
             const t=tClean[i], h=hClean[i];
@@ -761,39 +824,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         });
         return out;
     }
-    // Accetta opzionalmente i dati Casa già scaricati (es. da loadCharts, che
-    // li ha appena presi per il grafico Temperatura): evita di riscaricarli
-    // una seconda volta identici quando il grafico Delta è aperto e si
-    // cambia periodo — prima venivano scaricati due volte.
     function loadDeltaChart(casaFeedsParam){
-        const {start,end,aggMin,chunkDays} = rangeParams(period);
+        const p = period;
+        const rp = rangeParams(p);
+        const gap = gapMs(p), jump = spikeJump(p);
         el('chartStatus').textContent='Caricamento delta...';
-        const casaPromise = casaFeedsParam ? Promise.resolve(casaFeedsParam) : fetchRangeSeq(start,end,aggMin,chunkDays);
+        const casaPromise = casaFeedsParam ? Promise.resolve(casaFeedsParam) : tsRange(TS_CH_CASA,TS_RKEY_CASA,rp.start,rp.end,rp.aggMin,rp.chunkDays,rp.cacheRows);
         Promise.all([
             casaPromise,
-            fetchTettoRange(start,end,aggMin,chunkDays)
+            tsRange(TS_CH_TETTO,TS_RKEY_TETTO,rp.start,rp.end,rp.aggMin,rp.chunkDays,rp.cacheRows)
         ]).then(([casaFeeds,tettoFeeds])=>{
+            if(p!==period) return;
             if(!casaFeeds.length || !tettoFeeds.length){ el('chartStatus').textContent='Nessun dato per il delta'; return; }
-            const tolMs = (period==='24h') ? 15*60000 : (period==='anno' ? 24*3600000 : 3*3600000);
-            // Despike simmetrico su ENTRAMBE le serie prima del confronto: un
-            // singolo glitch del sensore Tetto (prima non filtrato qui) finiva
-            // dritto nel grafico delta come un falso picco.
+            const tolMs = (p==='24h') ? 15*60000 : (p==='anno' ? 36*3600000 : 3*3600000);
             const tRawCasa = casaFeeds.map(f=>(f['field'+FIELD.temp]===null||f['field'+FIELD.temp]===undefined||f['field'+FIELD.temp]==='')?null:parseFloat(f['field'+FIELD.temp]));
-            const tCleanCasa = despike(tRawCasa, 2.5);
+            const tCleanCasa = jump ? despike(tRawCasa, jump) : tRawCasa;
             const casaFeedsClean = casaFeeds.map((f,i)=>Object.assign({},f,{['field'+FIELD.temp]: tCleanCasa[i]===null?'':tCleanCasa[i]}));
             const tRawTetto = tettoFeeds.map(f=>(f.field1===null||f.field1===undefined||f.field1==='')?null:parseFloat(f.field1));
-            const tCleanTetto = despike(tRawTetto, 2.5);
+            const tCleanTetto = jump ? despike(tRawTetto, jump) : tRawTetto;
             const tettoFeedsClean = tettoFeeds.map((f,i)=>Object.assign({},f,{field1: tCleanTetto[i]===null?'':tCleanTetto[i]}));
             const deltaData = alignByTimestamp(casaFeedsClean, FIELD.temp, tettoFeedsClean, 1, tolMs);
-            makeChart('chartDelta',[{
+            makeChart('chartDelta',[Object.assign({
                 label:'Delta Casa - Tetto',
                 data:deltaData,
-                borderColor:'#e3b341',
-                borderWidth:2,
-                pointRadius:0,
-                pointHoverRadius:6,
-                pointHitRadius:14,
-                spanGaps:true,
                 fill:{target:{value:0}},
                 segment:{
                     backgroundColor:ctx=>{
@@ -801,35 +854,38 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
                         return y>=0 ? 'rgba(227,179,65,0.18)' : 'rgba(88,166,255,0.18)';
                     }
                 }
-            }],'°C (Casa − Tetto)');
+            }, lineOpts(p,'#e3b341',gap))],'°C (Casa − Tetto)');
             el('chartStatus').textContent='Aggiornato: '+deltaData.length+' punti confrontati';
         }).catch(e=>{ el('chartStatus').textContent='Errore caricamento delta'; console.warn(e); });
     }
     function loadCharts(p){
+        const token = ++loadToken;
         el('chartStatus').textContent='Caricamento...';
-        const {start,end,aggMin,chunkDays} = rangeParams(p);
-        fetchRangeSeq(start,end,aggMin,chunkDays).then(feeds=>{
+        const rp = rangeParams(p);
+        const gap = gapMs(p), jump = spikeJump(p);
+        const prog = (i,n)=>{ if(token===loadToken && n>3) el('chartStatus').textContent='Caricamento... blocco '+(i+1)+' di '+n; };
+        return tsRange(TS_CH_CASA,TS_RKEY_CASA,rp.start,rp.end,rp.aggMin,rp.chunkDays,rp.cacheRows,prog).then(feeds=>{
+            if(token!==loadToken) return;
             if(!feeds.length){ el('chartStatus').textContent='Nessun dato'; return; }
             lastCasaFeeds = feeds;
-            el('chartStatus').textContent='Aggiornato: '+feeds.length+' campioni';
+            el('chartStatus').textContent='Aggiornato: '+feeds.length+' campioni'+(p==='anno'?' (1 punto al giorno)':'');
             const tempDatasets = [
-                {label:'Temperatura Casa',data:seriesFrom(feeds,FIELD.temp,2.5),borderColor:'#58a6ff',borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHitRadius:14,spanGaps:true,yAxisID:'y'}
+                Object.assign({label:'Temperatura Casa',data:seriesFrom(feeds,FIELD.temp,jump),yAxisID:'y'}, lineOpts(p,'#58a6ff',gap))
             ];
-            makeChart('chartH',[{label:'Umidità',data:seriesFrom(feeds,FIELD.hum),borderColor:'#3fb950',borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHitRadius:14,spanGaps:true}],'%');
-            makeChart('chartHx',[{label:'Humidex (percepita)',data:humidexSeriesFrom(feeds),borderColor:'#e3b341',borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHitRadius:14,spanGaps:true}],'°C');
+            makeChart('chartH',[Object.assign({label:'Umidità',data:seriesFrom(feeds,FIELD.hum)}, lineOpts(p,'#3fb950',gap))],'%');
+            makeChart('chartHx',[Object.assign({label:'Humidex (percepita)',data:humidexSeriesFrom(feeds,jump)}, lineOpts(p,'#e3b341',gap))],'°C');
+            if(deltaChartOn) loadDeltaChart(feeds);
             if(overlayOn){
-                fetchTettoRange(start,end,aggMin,chunkDays).then(tettoFeeds=>{
+                return tsRange(TS_CH_TETTO,TS_RKEY_TETTO,rp.start,rp.end,rp.aggMin,rp.chunkDays,rp.cacheRows).then(tettoFeeds=>{
+                    if(token!==loadToken) return;
                     if(tettoFeeds.length){
-                        tempDatasets.push({label:'Temperatura Tetto',data:seriesFrom(tettoFeeds,FIELD.temp,2.5),borderColor:'#f85149',borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHitRadius:14,spanGaps:true,borderDash:[4,3],yAxisID:'y'});
+                        tempDatasets.push(Object.assign({label:'Temperatura Tetto',data:seriesFrom(tettoFeeds,FIELD.temp,jump),borderDash:[4,3],yAxisID:'y'}, lineOpts(p,'#f85149',gap)));
                     }
                     makeChart('chartT',tempDatasets,'°C');
                 });
-            } else {
-                makeChart('chartT',tempDatasets,'°C');
             }
-            // Passo i dati Casa già scaricati, cosi' loadDeltaChart non li rifetcha.
-            if(deltaChartOn) loadDeltaChart(feeds);
-        }).catch(e=>{ el('chartStatus').textContent='Errore caricamento'; console.warn(e); });
+            makeChart('chartT',tempDatasets,'°C');
+        }).catch(e=>{ if(token===loadToken) el('chartStatus').textContent='Errore caricamento'; console.warn(e); });
     }
     function makeChart(id,datasets,yLabel,extraScales){
         const ctx=el(id); if(!ctx) return;
@@ -857,14 +913,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         charts[id]=new Chart(ctx, { type:'line', data:{datasets}, options:opts });
     }
 
-    fetchTettoLive(); fetchLive(); fetchTrend(); loadCharts('24h');
-    setTimeout(fetchMonth, 3000);
-    setTimeout(fetchYear, 6000);
+    // Avvio: prima dati live e grafico 24h; gli estremi Mese/Anno partono dopo
+    fetchTettoLive(); fetchLive(); fetchTrend();
+    loadCharts('24h').then(()=>setTimeout(runExtremes,1500));
     setInterval(fetchTettoLive, 60000);
     setInterval(fetchLive, 60000);
     setInterval(fetchTrend, 60000);
-    setInterval(()=>{ monthDone=false; fetchMonth(); }, 3600000);
-    setInterval(()=>{ yearDone=false; fetchYear(); }, 3600000);
+    setInterval(()=>{ monthDone=false; yearDone=false; runExtremes(); }, 3600000);
 </script>
 </body>
 </html>
