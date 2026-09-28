@@ -15,7 +15,11 @@
 .pagenav-btn:active{background:#0d1f33;}
 .pagenav-label{font-size:.72rem;color:var(--sub);text-align:center;flex:1;}
 body{padding-bottom:64px;}
+.wind-data,.wd-item{min-width:0}
+.wind-chart{grid-column:1/-1;border-top:1px solid var(--brd);padding-top:8px;margin-top:2px}
+.wind-chart .chart-wrap{height:300px}
 @media (max-width:480px){
+    .wind-chart .chart-wrap{height:200px}
     .chart-grid{grid-template-columns:1fr;}
     .chart-wrap{height:200px;}
     .val{font-size:1.55rem;}
@@ -226,6 +230,10 @@ body{padding-bottom:64px;}
                 <div id="g_mo" class="ex-panel"><div class="wd-exl"><span class="mx" id="gMoMx_v">--</span></div></div>
                 <div id="g_yr" class="ex-panel"><div class="wd-exl"><span class="mx" id="gYrMx_v">--</span></div></div>
             </div>
+            <div class="wd-item wind-chart">
+                <div class="wd-lbl">Andamento — Media / Raffica (km/h)</div>
+                <div class="chart-wrap"><canvas id="chartV"></canvas></div>
+            </div>
         </div>
     </div>
 
@@ -244,7 +252,6 @@ body{padding-bottom:64px;}
             <div class="chart-box"><div class="chart-title">🥵 Temperatura Percepita (°C)</div><div class="chart-wrap"><canvas id="chartHx"></canvas></div></div>
             <div class="chart-box"><div class="chart-title">💧 Umidita (%)</div><div class="chart-wrap"><canvas id="chartH"></canvas></div></div>
             <div class="chart-box"><div class="chart-title">💨 Pressione s.l.m. (hPa)</div><div class="chart-wrap"><canvas id="chartP"></canvas></div></div>
-            <div class="chart-box"><div class="chart-title">🌬 Vento — Media / Raffica (km/h)</div><div class="chart-wrap"><canvas id="chartV"></canvas></div></div>
             <div class="chart-box"><div class="chart-title">🌧 Pioggia — Intensità (mm/h) e Accumulo (mm)</div><div class="chart-wrap"><canvas id="chartRain"></canvas></div></div>
             <div class="chart-box"><div class="chart-title">☀ Radiazione (lux)</div><div class="chart-wrap"><canvas id="chartL"></canvas></div></div>
         </div>

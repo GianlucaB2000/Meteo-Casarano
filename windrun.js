@@ -19,7 +19,7 @@
     '</div></div>';
 
     const CHART_HTML =
-    '<div class="chart-box"><div class="chart-title">🌬 Wind run (km al giorno)</div>' +
+    '<div class="chart-box" style="grid-column:1/-1;"><div class="chart-title">🌬 Wind run (km al giorno)</div>' +
       '<div class="chart-toolbar" style="margin-bottom:4px;">' +
         '<button class="ct-btn active" id="wrB7" onclick="wrSetPeriod(\'7d\')">7 giorni</button>' +
         '<button class="ct-btn" id="wrB30" onclick="wrSetPeriod(\'30d\')">30 giorni</button>' +
