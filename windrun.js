@@ -67,12 +67,12 @@
         const key=monthKey(ms);
         if(locks[key]) return locks[key];
         const cur=isCurrentMonth(ms);
-        const ck=cacheKey('windrun_'+key);
+        const ck=cacheKey('windrun2_'+key);
         if(!cur){
             try{ const r=JSON.parse(localStorage.getItem(ck)); if(r&&r.complete) return Promise.resolve(r.days); }catch(e){}
         }
         const end=cur?new Date():new Date(ms.getFullYear(),ms.getMonth()+1,1);
-        locks[key]=fetchThingSpeakRange(ms,end,60,31).then(function(feeds){
+        locks[key]=fetchThingSpeakRange(ms,end,60,4).then(function(feeds){
             feeds=feeds||[];
             const days=daily(despikeWind(feeds));
             if(!cur && feeds.length){ try{ localStorage.setItem(ck,JSON.stringify({complete:true,days:days})); }catch(e){} }
@@ -162,5 +162,5 @@
 
     // Avvio scaglionato (dopo gli altri fetch ThingSpeak, per non farsi limitare)
     setTimeout(loadAll, 14000);
-    setInterval(loadAll, 600000);
+    setInterval(loadAll, 1800000);
 })();
