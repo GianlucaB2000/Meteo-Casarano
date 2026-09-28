@@ -26,7 +26,6 @@
       '<div class="wr-toggle" style="justify-content:center;margin-top:0;">' +
         '<button class="wr-btn" id="rsB3h">3 ore</button>' +
         '<button class="wr-btn active" id="rsB24h">24 ore</button>' +
-        '<button class="wr-btn" id="rsB7d">7 giorni</button>' +
       '</div>' +
       '<input type="range" id="rsSl" min="0" max="0" value="0" style="width:100%;margin-top:10px;accent-color:#58a6ff;">' +
       '<div style="display:flex;justify-content:space-between;font-size:.55rem;color:var(--sub);"><span>-24h</span><button class="wr-btn" id="rsLive" style="padding:1px 8px;">● Adesso</button></div>' +
@@ -40,7 +39,7 @@
     bg.src='mappa.jpg';
 
     // ─── Statistiche del periodo ───
-    function cutoff(){ const h=period==='3h'?3:period==='24h'?24:168; return Date.now()-h*3600000; }
+    function cutoff(){ const h=period==='3h'?3:24; return Date.now()-h*3600000; }
     function rebuild(){
         const now=Date.now();
         s24=series.filter(function(p){ return p.t>=now-24*3600000; });
@@ -111,27 +110,20 @@
         for(let i=0;i<36;i++){ const a=i*10*Math.PI/180-Math.PI/2, big=i%9===0; const ra=big?R*0.90:R*0.94; ctx.beginPath(); ctx.moveTo(cx+Math.cos(a)*ra,cy+Math.sin(a)*ra); ctx.lineTo(cx+Math.cos(a)*R*0.98,cy+Math.sin(a)*R*0.98); ctx.strokeStyle=big?'#8b949e':'#30363d'; ctx.lineWidth=big?1.3:0.7; ctx.stroke(); }
         ctx.textBaseline='middle';
         [['N',0],['E',90],['S',180],['O',270]].forEach(function(x){ const a=(x[1]-90)*Math.PI/180; ctx.font='bold 11px sans-serif'; const lx=cx+Math.cos(a)*R*0.80, ly=cy+Math.sin(a)*R*0.80; ctx.lineWidth=3; ctx.strokeStyle='rgba(13,17,23,0.95)'; ctx.strokeText(x[0],lx,ly); ctx.fillStyle=x[0]==='N'?'#ff6b63':'#ffffff'; ctx.fillText(x[0],lx,ly); });
-        // freccia sul bordo che punta verso il centro, dal lato da cui arriva il vento
+        // triangolo sul bordo che punta verso il centro, dal lato da cui arriva il vento
         const cur=curSample();
         const ang=(cur.d-90)*Math.PI/180, ux=Math.cos(ang), uy=Math.sin(ang), px=-uy, py=ux;
-        const rTail=R*0.95, rBase=R*0.76, rTip=R*0.60, hw=10;
-        const col=speedColor(cur.v,1);
-        const edge=cur.live ? '#ffffff' : '#58a6ff';   // bianco = live, blu = storico (slider)
-        function shaft(w){
-            ctx.beginPath(); ctx.moveTo(cx+ux*rTail, cy+uy*rTail); ctx.lineTo(cx+ux*rBase, cy+uy*rBase);
-            ctx.lineWidth=w; ctx.lineCap='round'; ctx.stroke();
-        }
-        function head(){
-            ctx.beginPath();
-            ctx.moveTo(cx+ux*rTip, cy+uy*rTip);
-            ctx.lineTo(cx+ux*rBase+px*hw, cy+uy*rBase+py*hw);
-            ctx.lineTo(cx+ux*rBase-px*hw, cy+uy*rBase-py*hw);
-            ctx.closePath();
-        }
+        const rTip=R*0.66, rBase=R*0.95, hw=12;
+        const fill=cur.live ? '#ffd60a' : '#38bdf8';   // giallo = adesso, azzurro = storico (slider)
+        ctx.beginPath();
+        ctx.moveTo(cx+ux*rTip, cy+uy*rTip);
+        ctx.lineTo(cx+ux*rBase+px*hw, cy+uy*rBase+py*hw);
+        ctx.lineTo(cx+ux*rBase-px*hw, cy+uy*rBase-py*hw);
+        ctx.closePath();
         ctx.lineJoin='round';
-        ctx.strokeStyle='rgba(0,0,0,0.85)'; shaft(9); head(); ctx.lineWidth=7; ctx.stroke();
-        ctx.strokeStyle=edge; shaft(6); head(); ctx.lineWidth=4; ctx.stroke();
-        ctx.strokeStyle=col; shaft(3.5); head(); ctx.fillStyle=col; ctx.fill();
+        ctx.strokeStyle='rgba(0,0,0,0.95)'; ctx.lineWidth=8; ctx.stroke();   // alone nero
+        ctx.strokeStyle='#ffffff';          ctx.lineWidth=4; ctx.stroke();   // bordo bianco
+        ctx.fillStyle=fill; ctx.fill();
         updateInfo(cur);
     }
 
@@ -145,7 +137,7 @@
         let html='';
         if(stats && stats.tot>0){
             const nm=windMedName(stats.best*22.5).n;
-            const lbl=period==='3h'?'3 ore':period==='24h'?'24 ore':'7 giorni';
+            const lbl=period==='3h'?'3 ore':'24 ore';
             html+='Prevalente ('+lbl+'): <span style="color:#e3b341">'+nm+' '+(stats.bestN/stats.tot*100).toFixed(0)+'%</span> · media '+stats.avg.toFixed(1)+' km/h · calma '+(stats.calm/stats.tot*100).toFixed(0)+'%<br>';
         }
         if(cur.live){ html+='<span style="color:var(--grn)">● Adesso</span>: '+windMedName(cur.d).n+' '+cur.d.toFixed(0)+'° · '+cur.v.toFixed(1)+' km/h'; }
@@ -156,12 +148,11 @@
     // ─── Eventi ───
     function setPeriod(p){
         period=p;
-        ['3h','24h','7d'].forEach(function(x){ el('rsB'+x).classList.toggle('active',x===p); });
+        ['3h','24h'].forEach(function(x){ el('rsB'+x).classList.toggle('active',x===p); });
         rebuild();
     }
     el('rsB3h').onclick=function(){ setPeriod('3h'); };
     el('rsB24h').onclick=function(){ setPeriod('24h'); };
-    el('rsB7d').onclick=function(){ setPeriod('7d'); };
     el('rsSl').addEventListener('input',function(){ scrub=true; render(); });
     el('rsLive').onclick=function(){ scrub=false; const sl=el('rsSl'); sl.value=sl.max; render(); };
 
@@ -186,11 +177,11 @@
         });
     }
 
-    // ─── Dati: ultimi 7 giorni grezzi, a blocchi da 4 giorni (limite 8000 di ThingSpeak) ───
+    // ─── Dati: ultime 24 ore grezze (1 richiesta, ~1400 righe), poi media a 10 minuti ───
     let busy=false;
     function loadSeries(){
         if(busy) return; busy=true;
-        const end=new Date(), start=new Date(end.getTime()-7*86400000);
+        const end=new Date(), start=new Date(end.getTime()-24*3600000);
         fetchThingSpeakRange(start,end,null,4).then(function(feeds){
             feeds=despikeWind(feeds||[]);
             const pts=feeds.map(function(f){ return { t:new Date(f.created_at).getTime(), d:parseFloat(f.field6), v:parseFloat(f.field4), g:parseFloat(f.field5) }; })
