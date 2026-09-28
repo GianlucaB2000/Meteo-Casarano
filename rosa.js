@@ -7,7 +7,6 @@
     const SIZE = 240;
     const MAP_OPACITY = 1;         // 0-1: opacità della mappa di sfondo
     const MAP_DIM = 0.10;          // 0-1: leggero scurimento sopra la mappa (0 = nessuno)
-    const ARROW_DOWNWIND = false;   // false = freccia verso la provenienza del vento; true = verso dove va
     const BANDS = [2.5, 7.5, 12.5, 17.5, 25];           // colori = legenda km/h esistente
     const BAND_LIM = [5, 10, 15, 20];
     const SH = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSO','SO','OSO','O','ONO','NO','NNO'];
@@ -112,31 +111,27 @@
         for(let i=0;i<36;i++){ const a=i*10*Math.PI/180-Math.PI/2, big=i%9===0; const ra=big?R*0.90:R*0.94; ctx.beginPath(); ctx.moveTo(cx+Math.cos(a)*ra,cy+Math.sin(a)*ra); ctx.lineTo(cx+Math.cos(a)*R*0.98,cy+Math.sin(a)*R*0.98); ctx.strokeStyle=big?'#8b949e':'#30363d'; ctx.lineWidth=big?1.3:0.7; ctx.stroke(); }
         ctx.textBaseline='middle';
         [['N',0],['E',90],['S',180],['O',270]].forEach(function(x){ const a=(x[1]-90)*Math.PI/180; ctx.font='bold 11px sans-serif'; const lx=cx+Math.cos(a)*R*0.80, ly=cy+Math.sin(a)*R*0.80; ctx.lineWidth=3; ctx.strokeStyle='rgba(13,17,23,0.95)'; ctx.strokeText(x[0],lx,ly); ctx.fillStyle=x[0]==='N'?'#ff6b63':'#ffffff'; ctx.fillText(x[0],lx,ly); });
-        // freccia direzione (live oppure campione scelto con lo slider)
-        // Punta verso la direzione DA CUI arriva il vento (come i petali).
-        // Per farla puntare dove il vento va, metti ARROW_DOWNWIND = true.
+        // freccia sul bordo che punta verso il centro, dal lato da cui arriva il vento
         const cur=curSample();
-        const dd=ARROW_DOWNWIND ? cur.d+180 : cur.d;
-        const ang=(dd-90)*Math.PI/180, ux=Math.cos(ang), uy=Math.sin(ang), px=-uy, py=ux;
-        const rs=r0+2, rh=R*0.60, rt=R*0.94, hw=15;
+        const ang=(cur.d-90)*Math.PI/180, ux=Math.cos(ang), uy=Math.sin(ang), px=-uy, py=ux;
+        const rTail=R*0.95, rBase=R*0.76, rTip=R*0.60, hw=10;
         const col=speedColor(cur.v,1);
         const edge=cur.live ? '#ffffff' : '#58a6ff';   // bianco = live, blu = storico (slider)
         function shaft(w){
-            ctx.beginPath(); ctx.moveTo(cx+ux*rs, cy+uy*rs); ctx.lineTo(cx+ux*rh, cy+uy*rh);
+            ctx.beginPath(); ctx.moveTo(cx+ux*rTail, cy+uy*rTail); ctx.lineTo(cx+ux*rBase, cy+uy*rBase);
             ctx.lineWidth=w; ctx.lineCap='round'; ctx.stroke();
         }
         function head(){
             ctx.beginPath();
-            ctx.moveTo(cx+ux*rt, cy+uy*rt);
-            ctx.lineTo(cx+ux*rh+px*hw, cy+uy*rh+py*hw);
-            ctx.lineTo(cx+ux*rh-px*hw, cy+uy*rh-py*hw);
+            ctx.moveTo(cx+ux*rTip, cy+uy*rTip);
+            ctx.lineTo(cx+ux*rBase+px*hw, cy+uy*rBase+py*hw);
+            ctx.lineTo(cx+ux*rBase-px*hw, cy+uy*rBase-py*hw);
             ctx.closePath();
         }
-        // 1) alone scuro  2) bordo chiaro  3) colore velocità
         ctx.lineJoin='round';
-        ctx.strokeStyle='rgba(0,0,0,0.85)'; shaft(13); head(); ctx.lineWidth=9; ctx.stroke();
-        ctx.strokeStyle=edge; shaft(9); head(); ctx.lineWidth=5; ctx.stroke();
-        ctx.strokeStyle=col; shaft(5); head(); ctx.fillStyle=col; ctx.fill();
+        ctx.strokeStyle='rgba(0,0,0,0.85)'; shaft(9); head(); ctx.lineWidth=7; ctx.stroke();
+        ctx.strokeStyle=edge; shaft(6); head(); ctx.lineWidth=4; ctx.stroke();
+        ctx.strokeStyle=col; shaft(3.5); head(); ctx.fillStyle=col; ctx.fill();
         updateInfo(cur);
     }
 
@@ -154,7 +149,7 @@
             html+='Prevalente ('+lbl+'): <span style="color:#e3b341">'+nm+' '+(stats.bestN/stats.tot*100).toFixed(0)+'%</span> · media '+stats.avg.toFixed(1)+' km/h · calma '+(stats.calm/stats.tot*100).toFixed(0)+'%<br>';
         }
         if(cur.live){ html+='<span style="color:var(--grn)">● Adesso</span>: '+windMedName(cur.d).n+' '+cur.d.toFixed(0)+'° · '+cur.v.toFixed(1)+' km/h'; }
-        else { const d=new Date(cur.t); html+='<span style="color:#58a6ff">'+pad(d.getDate())+'/'+pad(d.getMonth()+1)+' '+pad(d.getHours())+':'+pad(d.getMinutes())+'</span>: '+windMedName(cur.d).n+' '+cur.d.toFixed(0)+'° · '+cur.v.toFixed(1)+' km/h'+(isNaN(cur.g)?'':' · raffica '+cur.g.toFixed(0)); }
+        else { const d=new Date(cur.t); html+='<span style="color:#58a6ff">'+pad(d.getDate())+'/'+pad(d.getMonth()+1)+' '+pad(d.getHours())+':'+pad(d.getMinutes())+'</span> (media 10′): '+windMedName(cur.d).n+' '+cur.d.toFixed(0)+'° · '+cur.v.toFixed(1)+' km/h'+(isNaN(cur.g)?'':' · raffica '+cur.g.toFixed(0)); }
         box.innerHTML=html;
     }
 
@@ -173,6 +168,24 @@
     // La pagina chiama drawCompass(dir, vel) ogni 15 s con il dato live: lo intercettiamo.
     window.drawCompass=function(dir,speed){ liveDir=dir||0; liveSpeed=speed||0; render(); };
 
+    // Media a 10 minuti: velocità = media aritmetica, direzione = media VETTORIALE
+    // pesata per la velocità (evita l'errore a cavallo di 0°/360°), raffica = massimo.
+    function bucket10(pts){
+        const m={};
+        pts.forEach(function(p){ const k=Math.floor(p.t/600000); (m[k]=m[k]||[]).push(p); });
+        return Object.keys(m).map(Number).sort(function(a,b){return a-b;}).map(function(k){
+            const a=m[k]; let sx=0, sy=0, sv=0, g=NaN;
+            a.forEach(function(p){
+                const r=p.d*Math.PI/180;
+                sx+=p.v*Math.sin(r); sy+=p.v*Math.cos(r); sv+=p.v;
+                if(!isNaN(p.g) && (isNaN(g) || p.g>g)) g=p.g;
+            });
+            let d=Math.atan2(sx,sy)*180/Math.PI; d=(d+360)%360;
+            if(sx*sx+sy*sy<1e-6) d=a[a.length-1].d;
+            return { t:k*600000+300000, d:d, v:sv/a.length, g:g };
+        });
+    }
+
     // ─── Dati: ultimi 7 giorni grezzi, a blocchi da 4 giorni (limite 8000 di ThingSpeak) ───
     let busy=false;
     function loadSeries(){
@@ -180,8 +193,9 @@
         const end=new Date(), start=new Date(end.getTime()-7*86400000);
         fetchThingSpeakRange(start,end,null,4).then(function(feeds){
             feeds=despikeWind(feeds||[]);
-            series=feeds.map(function(f){ return { t:new Date(f.created_at).getTime(), d:parseFloat(f.field6), v:parseFloat(f.field4), g:parseFloat(f.field5) }; })
+            const pts=feeds.map(function(f){ return { t:new Date(f.created_at).getTime(), d:parseFloat(f.field6), v:parseFloat(f.field4), g:parseFloat(f.field5) }; })
                         .filter(function(p){ return !isNaN(p.d)&&!isNaN(p.v)&&p.d>=0&&p.d<=360; });
+            series=bucket10(pts);
             rebuild();
         }).catch(function(e){ console.warn('[rosa]',e); })
           .finally(function(){ busy=false; });
