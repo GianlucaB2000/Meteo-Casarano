@@ -5,6 +5,7 @@
     'use strict';
 
     const SIZE = 240;
+    const ARROW_DOWNWIND = false;   // false = freccia verso la provenienza del vento; true = verso dove va
     const BANDS = [2.5, 7.5, 12.5, 17.5, 25];           // colori = legenda km/h esistente
     const BAND_LIM = [5, 10, 15, 20];
     const SH = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSO','SO','OSO','O','ONO','NO','NNO'];
@@ -68,7 +69,7 @@
         const g=ctx.createRadialGradient(cx,cy,R*0.2,cx,cy,R);
         g.addColorStop(0,'#1e2d3d'); g.addColorStop(1,'#0d1117');
         ctx.fillStyle=g; ctx.fillRect(0,0,W,W);
-        if(bgOk){ ctx.globalAlpha=0.55; ctx.drawImage(bg,cx-R,cy-R,2*R,2*R); ctx.globalAlpha=1; ctx.fillStyle='rgba(13,17,23,0.45)'; ctx.fillRect(0,0,W,W); }
+        if(bgOk){ ctx.globalAlpha=0.55; const sq=Math.min(bg.width,bg.height); ctx.drawImage(bg,(bg.width-sq)/2,(bg.height-sq)/2,sq,sq,cx-R,cy-R,2*R,2*R); ctx.globalAlpha=1; ctx.fillStyle='rgba(13,17,23,0.45)'; ctx.fillRect(0,0,W,W); }
         ctx.restore();
         ctx.beginPath(); ctx.arc(cx,cy,R,0,2*Math.PI); ctx.strokeStyle='#58a6ff'; ctx.lineWidth=2; ctx.stroke();
 
@@ -109,16 +110,28 @@
         for(let i=0;i<36;i++){ const a=i*10*Math.PI/180-Math.PI/2, big=i%9===0; const ra=big?R*0.90:R*0.94; ctx.beginPath(); ctx.moveTo(cx+Math.cos(a)*ra,cy+Math.sin(a)*ra); ctx.lineTo(cx+Math.cos(a)*R*0.98,cy+Math.sin(a)*R*0.98); ctx.strokeStyle=big?'#8b949e':'#30363d'; ctx.lineWidth=big?1.3:0.7; ctx.stroke(); }
         ctx.textBaseline='middle';
         [['N',0],['E',90],['S',180],['O',270]].forEach(function(x){ const a=(x[1]-90)*Math.PI/180; ctx.font='bold 11px sans-serif'; ctx.fillStyle=x[0]==='N'?'#f85149':'#cdd9e5'; ctx.fillText(x[0],cx+Math.cos(a)*R*0.80,cy+Math.sin(a)*R*0.80); });
-        // indicatore direzione (live oppure campione scelto con lo slider)
+        // freccia direzione (live oppure campione scelto con lo slider)
+        // Punta verso la direzione DA CUI arriva il vento (come i petali).
+        // Per farla puntare dove il vento va, metti ARROW_DOWNWIND = true.
         const cur=curSample();
-        const a=(cur.d-90)*Math.PI/180, ux=Math.cos(a), uy=Math.sin(a), px=-uy, py=ux;
-        const tip=R*0.70, base=R*0.90, hw=7;
+        const dd=ARROW_DOWNWIND ? cur.d+180 : cur.d;
+        const ang=(dd-90)*Math.PI/180, ux=Math.cos(ang), uy=Math.sin(ang), px=-uy, py=ux;
+        const rs=r0+2, rh=R*0.66, rt=R*0.90, hw=9;
+        const col=speedColor(cur.v,1);
+        function arrowPath(k){
+            ctx.beginPath();
+            ctx.moveTo(cx+ux*rs, cy+uy*rs); ctx.lineTo(cx+ux*rh, cy+uy*rh);
+            ctx.lineWidth=3+k; ctx.lineCap='round';
+        }
+        // contorno scuro + freccia colorata
+        arrowPath(3); ctx.strokeStyle='rgba(13,17,23,0.9)'; ctx.stroke();
+        arrowPath(0); ctx.strokeStyle=col; ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(cx+ux*tip, cy+uy*tip);
-        ctx.lineTo(cx+ux*base+px*hw, cy+uy*base+py*hw);
-        ctx.lineTo(cx+ux*base-px*hw, cy+uy*base-py*hw);
-        ctx.closePath(); ctx.fillStyle=speedColor(cur.v,1); ctx.fill();
-        ctx.strokeStyle='#0d1117'; ctx.lineWidth=1.2; ctx.stroke();
+        ctx.moveTo(cx+ux*rt, cy+uy*rt);
+        ctx.lineTo(cx+ux*rh+px*hw, cy+uy*rh+py*hw);
+        ctx.lineTo(cx+ux*rh-px*hw, cy+uy*rh-py*hw);
+        ctx.closePath(); ctx.fillStyle=col; ctx.fill();
+        ctx.strokeStyle= cur.live ? '#0d1117' : '#58a6ff'; ctx.lineWidth=1.6; ctx.stroke();
         updateInfo(cur);
     }
 
