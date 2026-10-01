@@ -268,7 +268,7 @@ body{padding-bottom:64px;}
 
     <div class="sec">Pioggia</div>
     <div class="grid">
-        <div class="card cr"><div class="lbl">Intensita (mm/h)</div><div class="val" id="RR">--</div><div class="unit">mm/h</div></div>
+        <div class="card cr"><div class="lbl">Intensita (mm/h)</div><div class="val" id="RR">--</div><div class="unit">mm/h — media ultimi 15 min</div></div>
         <div class="card cr"><div class="lbl">Oggi (mm)</div><div class="val" id="R">--</div><div class="unit">mm — reset 00:00</div></div>
         <div class="card cr"><div class="lbl">Questo Mese (mm)</div><div class="val" id="rainMonth">--</div><div class="unit">mm</div></div>
         <div class="card cr"><div class="lbl">Quest'Anno (mm)</div><div class="val" id="rainYear">--</div><div class="unit">mm</div></div>
@@ -407,6 +407,19 @@ body{padding-bottom:64px;}
             setExt('v24Mn_v','v24Mn_t','▼',V.mn,V.mnDt);
             setExt('v24Mx_v','v24Mx_t','▲',V.mx,V.mxDt);
             setExt('g24Mx_v','g24Mx_t','▲',G.mx,G.mxDt);
+
+            // Intensita' pioggia: mm caduti negli ultimi 15 minuti, riportati a mm/h
+            (function(){
+                const since=Date.now()-15*60000;
+                const w=feeds.filter(f=>new Date(f.created_at).getTime()>=since);
+                if(w.length<2) return;
+                let mm=0;
+                for(let i=1;i<w.length;i++){
+                    const p=parseFloat(w[i-1].field8), c=parseFloat(w[i].field8);
+                    if(!isNaN(p)&&!isNaN(c)&&c>p) mm+=c-p;
+                }
+                safeSet('RR',(mm*4).toFixed(1));
+            })();
 
             // Trend 1h
             const now2=new Date();
@@ -674,11 +687,18 @@ body{padding-bottom:64px;}
 
     // ─── Pioggia mensile/annuale ───
     function calcRainTotals(){
+        // Il contatore field8 si azzera a mezzanotte italiana, quindi mese/anno
+        // vanno calcolati sui giorni locali (timezone=Europe/Rome). Con max=1440
+        // ThingSpeak restituisce un solo valore al giorno (il massimo = totale
+        // del giorno): bastano al piu' 366 righe, invece di 8000 campioni grezzi.
+        // Nota: i giorni precedenti alla correzione del firmware avevano il reset
+        // a mezzanotte UTC, quindi un giorno con pioggia a cavallo del reset
+        // (00:00-02:00 locali) puo' essere sottostimato di poco.
         const now=new Date();
         const y=now.getFullYear();
         const mo=String(now.getMonth()+1).padStart(2,'0');
-        const startMonth=y+'-'+mo+'-01T00:00:00Z';
-        const startYear=y+'-01-01T00:00:00Z';
+        const startMonth=y+'-'+mo+'-01%2000:00:00';
+        const startYear=y+'-01-01%2000:00:00';
         function sumDailyMax(feeds){
             const days={};
             feeds.forEach(f=>{
@@ -689,12 +709,13 @@ body{padding-bottom:64px;}
             });
             return Object.values(days).reduce((a,b)=>a+b,0);
         }
-        fetch('https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+startMonth+'&results=8000')
-            .then(r=>r.json()).then(data=>{ if(!data||!data.feeds)return; safeSet('rainMonth',sumDailyMax(data.feeds).toFixed(1)); })
-            .catch(e=>console.warn('[rainMonth]',e));
-        fetch('https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+startYear+'&results=8000')
-            .then(r=>r.json()).then(data=>{ if(!data||!data.feeds)return; safeSet('rainYear',sumDailyMax(data.feeds).toFixed(1)); })
-            .catch(e=>console.warn('[rainYear]',e));
+        function load(start,id){
+            fetch('https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+start+'&max=1440&timezone=Europe/Rome&results=8000')
+                .then(r=>r.json()).then(data=>{ if(!data||!data.feeds)return; safeSet(id,sumDailyMax(data.feeds).toFixed(1)); })
+                .catch(e=>console.warn('['+id+']',e));
+        }
+        load(startMonth,'rainMonth');
+        setTimeout(function(){ load(startYear,'rainYear'); },1500);
     }
     setTimeout(calcRainTotals, 6000);
     setInterval(calcRainTotals, 3600000);
@@ -955,8 +976,13 @@ body{padding-bottom:64px;}
 
     // ─── Grafici con Chart.js ───
     let charts={};
-    function buildCharts(feeds, period) {
+    function buildCharts(feeds, period, rainDaily) {
         if (!feeds || feeds.length === 0) { safeSet('chartStatus', 'Nessun dato'); return; }
+        var xMin, xMax;
+        if (period === 'anno' && feeds.length > 1) {
+            xMin = new Date(feeds[0].created_at).getTime();
+            xMax = new Date(feeds[feeds.length - 1].created_at).getTime();
+        }
         function toTimeSeriesFrom(arr, field) {
             return arr.map(function(f) {
                 var v = parseFloat(f['field' + field]);
@@ -995,7 +1021,7 @@ body{padding-bottom:64px;}
                     datalabels: { display: false }
                 },
                 scales: {
-                    x: { type: 'time', time: { displayFormats: { hour: 'HH:mm', day: 'dd/MM' }, tooltipFormat: 'dd/MM/yyyy HH:mm' }, ticks: { color: '#8b949e', font: { size: 9 }, maxTicksLimit: 10, maxRotation: 0 }, grid: { color: '#1c2430' }, border: { color: '#30363d' } },
+                    x: { type: 'time', min: xMin, max: xMax, time: { displayFormats: { hour: 'HH:mm', day: 'dd/MM' }, tooltipFormat: 'dd/MM/yyyy HH:mm' }, ticks: { color: '#8b949e', font: { size: 9 }, maxTicksLimit: 10, maxRotation: 0 }, grid: { color: '#1c2430' }, border: { color: '#30363d' } },
                     y: { ticks: { color: '#8b949e', font: { size: 9 } }, grid: { color: '#1c2430' }, border: { color: '#30363d' }, title: { display: true, text: yLabel, color: '#8b949e', font: { size: 9 } } }
                 }
             };
@@ -1037,27 +1063,48 @@ body{padding-bottom:64px;}
         makeChart('chartV', 'line', [makeDataset(vData, '#3fb950', 'Media'), makeDataset(gData, '#e3b341', 'Raffica')], null, baseOpts('km/h'));
         var lOpts = baseOpts('lux (log)'); lOpts.scales.y.type='logarithmic'; lOpts.scales.y.min=0.01;
         makeChart('chartL', 'line', [makeDataset(lData, '#f59e0b', 'Luce')], null, lOpts);
-        var rrData = [];
-        for (var i = 1; i < rData.length; i++) {
-            var prev = rData[i - 1];
-            var curr = rData[i];
-            if (prev === null || curr === null || prev.y === null || curr.y === null) { rrData.push({ x: curr.x, y: 0 }); continue; }
-            var diff = curr.y - prev.y;
-            if (diff < 0) diff = 0;
-            var dt = (curr.x - prev.x) / 3600000;
-            rrData.push({ x: curr.x, y: dt > 0 ? diff / dt : 0 });
+        var rainOpts, rainBars, rainLine, rainLineLabel, barLabel;
+        if (period !== '24h' && rainDaily && rainDaily.length) {
+            // 7 giorni / 30 giorni / Anno: barre = mm totali per giorno,
+            // linea = totale cumulato nel periodo (i dati grezzi sono gia'
+            // aggregati con la mediana, quindi non si puo' derivare l'intensita').
+            var cum = 0;
+            rainBars = rainDaily.map(function(p){ return { x: p.x, y: p.y }; });
+            rainLine = rainDaily.map(function(p){ cum += p.y; return { x: p.x, y: Math.round(cum * 100) / 100 }; });
+            barLabel = 'Pioggia giornaliera mm';
+            rainLineLabel = 'Totale periodo mm';
+            rainOpts = baseOpts('mm / giorno');
+        } else {
+            // 24 ore: intensita' in mm/h calcolata a intervalli di 10 minuti
+            // (prima era un punto per campione: barre piu' sottili di 1 px).
+            var binMs = 10 * 60000;
+            var bins = {};
+            for (var i = 1; i < rData.length; i++) {
+                var pr = rData[i - 1], cu = rData[i];
+                if (!pr || !cu || pr.y === null || cu.y === null) continue;
+                var df = cu.y - pr.y; if (df < 0) df = 0;   // salta il reset di mezzanotte
+                var k = Math.floor(cu.x / binMs) * binMs;
+                bins[k] = (bins[k] || 0) + df;
+            }
+            rainBars = [];
+            if (rData.length > 1) {
+                var kStart = Math.floor(rData[0].x / binMs) * binMs;
+                var kEnd = Math.floor(rData[rData.length - 1].x / binMs) * binMs;
+                for (var kk = kStart; kk <= kEnd; kk += binMs) {
+                    rainBars.push({ x: kk + binMs / 2, y: (bins[kk] || 0) / (binMs / 3600000) });
+                }
+            }
+            rainLine = rData;
+            barLabel = 'Intensità mm/h';
+            rainLineLabel = 'Accumulo mm';
+            rainOpts = baseOpts('mm/h');
         }
-        // Pioggia: un unico grafico con doppio asse Y invece dei due box
-        // separati di prima. Barre = intensita' (mm/h, asse sinistro), linea =
-        // accumulo cumulativo (mm, asse destro), sullo stesso asse temporale -
-        // cosi' i due dati restano sempre visibili e correlabili, senza il box
-        // dell'accumulo che compariva/spariva a seconda che piovesse o meno.
-        var rainOpts = baseOpts('mm/h');
         rainOpts.scales.y.min = 0;
+        rainOpts.scales.y.suggestedMax = 4;   // anche la pioggia debole resta ben visibile
         rainOpts.scales.y1 = { position: 'right', min: 0, ticks: { color: '#8b949e', font: { size: 9 } }, grid: { drawOnChartArea: false }, border: { color: '#30363d' }, title: { display: true, text: 'mm (accumulo)', color: '#8b949e', font: { size: 9 } } };
         makeChart('chartRain', 'bar', [
-            { type: 'bar', label: 'Intensità mm/h', data: rrData, backgroundColor: 'rgba(96,165,250,0.5)', borderColor: '#60a5fa', borderWidth: 1, yAxisID: 'y' },
-            { type: 'line', label: 'Accumulo mm', data: rData, borderColor: '#e3b341', backgroundColor: 'transparent', borderWidth: 2, spanGaps: true, pointRadius: 0, pointHoverRadius: 8, pointHitRadius: 12, fill: false, yAxisID: 'y1' }
+            { type: 'bar', label: barLabel, data: rainBars, backgroundColor: 'rgba(96,165,250,0.9)', borderColor: '#93c5fd', borderWidth: 1, barPercentage: 1, categoryPercentage: 1, yAxisID: 'y' },
+            { type: 'line', label: rainLineLabel, data: rainLine, borderColor: '#e3b341', backgroundColor: 'transparent', borderWidth: 2, spanGaps: true, pointRadius: 0, pointHoverRadius: 8, pointHitRadius: 12, fill: false, yAxisID: 'y1' }
         ], null, rainOpts);
         safeSet('chartStatus', 'Aggiornato: ' + feeds.length + ' campioni');
     }
@@ -1281,6 +1328,21 @@ body{padding-bottom:64px;}
         });
     }
 
+    // Pioggia giornaliera (massimo del contatore per giorno italiano = totale del giorno)
+    function fetchRainDaily(start,end){
+        const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+start.toISOString()+'&end='+end.toISOString()+'&max=1440&timezone=Europe/Rome&results=8000';
+        return fetch(url).then(r=>r.json()).then(function(data){
+            const days={};
+            ((data&&data.feeds)||[]).forEach(function(f){
+                const v=parseFloat(f.field8);
+                if(isNaN(v)||v<0) return;
+                const d=f.created_at.substring(0,10);
+                if(days[d]===undefined||v>days[d]) days[d]=v;
+            });
+            return Object.keys(days).sort().map(function(d){ return { x: Date.parse(d+'T12:00:00Z'), y: days[d] }; });
+        }).catch(function(e){ console.warn('[rainDaily]',e); return []; });
+    }
+
     let chartLoadSeq=0, chartLoadBusy=false;
     function loadCharts(period,isAuto){
         if(isAuto && chartLoadBusy) return;
@@ -1299,10 +1361,22 @@ body{padding-bottom:64px;}
         if(period==='anno') promise=fetchYearChartCached();
         else promise=fetchThingSpeakRange(start,end,aggMinutes,chunkDays);
 
-        promise.then(function(feeds){
+        promise=promise.then(function(feeds){
+            if(!feeds || feeds.length===0 || loadId!==chartLoadSeq || period!==chartPeriod) return {feeds:feeds,rain:null};
+            if(period==='anno'){
+                // Taglia i giorni iniziali senza dati validi: il grafico parte dal primo dato reale
+                const fv=feeds.findIndex(function(f){ return !isNaN(parseFloat(f.field1)); });
+                if(fv>0) feeds=feeds.slice(fv);
+            }
+            if(period==='24h') return {feeds:feeds,rain:null};
+            return fetchRainDaily(new Date(feeds[0].created_at),new Date()).then(function(rd){ return {feeds:feeds,rain:rd}; });
+        });
+
+        promise.then(function(res){
+            const feeds=res.feeds;
             if(loadId!==chartLoadSeq || period!==chartPeriod) return;
             if(!feeds || feeds.length===0){ safeSet('chartStatus','Nessun dato'); return; }
-            buildCharts(feeds,period);
+            buildCharts(feeds,period,res.rain);
             if(period==='anno' && feeds.length){
                 const first=new Date(feeds[0].created_at);
                 const last=new Date(feeds[feeds.length-1].created_at);
