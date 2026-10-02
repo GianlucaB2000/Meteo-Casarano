@@ -1006,10 +1006,10 @@ body{padding-bottom:64px;}
             }
             var token = ++deltaToken;
             safeSet('chartTTitle', '🌡 Delta termico SHT40 − BMP280 (°C)');
-            safeSet('chartStatus', 'Carico BMP280 da openSenseMap...');
-            getBmpDelta(tData).then(function(delta){
+            safeSet('chartStatus', 'Carico SHT40 e BMP280 da openSenseMap...');
+            getOsemDelta().then(function(delta){
                 if (token !== deltaToken || tempMode !== 'delta') return;
-                if (!delta.length) { safeSet('chartStatus', 'Nessun dato BMP280'); return; }
+                if (!delta.length) { safeSet('chartStatus', 'Nessun dato openSenseMap'); return; }
                 var mean = delta.reduce(function(a,p){ return a + p.y; }, 0) / delta.length;
                 var x0 = delta[0].x, x1 = delta[delta.length-1].x;
                 var zero = { label: 'Zero', data: [{x:x0,y:0},{x:x1,y:0}], borderColor: '#8b949e', borderDash: [4,4], borderWidth: 1, pointRadius: 0, fill: false };
@@ -1167,45 +1167,49 @@ body{padding-bottom:64px;}
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // MOD 4: blocco Delta termico SHT40 − BMP280 (BMP da openSenseMap)
+    // MOD 4: blocco Delta termico SHT40 − BMP280 (ENTRAMBI da openSenseMap)
     // Inserito subito prima di "let chartPeriod='24h';"
     // ═══════════════════════════════════════════════════════════════════
     const OSEM_BOX = '6ab3d710e3bf1c00070bb789';
-    let tempMode = 'temp', deltaToken = 0, osemBmpSensorId = null;
+    let tempMode = 'temp', deltaToken = 0;
+    let osemSensorIds = null;
 
     function toggleTempMode(){
         tempMode = (tempMode === 'temp') ? 'delta' : 'temp';
         if (window.renderTempChart) window.renderTempChart();
     }
 
-    function getBmpTempSensorId(){
-        if (osemBmpSensorId) return Promise.resolve(osemBmpSensorId);
+    // Trova su openSenseMap il sensore temperatura SHT40 e quello BMP280
+    function getOsemTempSensors(){
+        if (osemSensorIds) return Promise.resolve(osemSensorIds);
         return fetch('https://api.opensensemap.org/boxes/' + OSEM_BOX).then(function(r){
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
         }).then(function(box){
             var sens = box.sensors || [];
+            var txt = function(s){ return (s.title || '') + ' ' + (s.sensorType || ''); };
             var isTemp = function(s){ return /temp/i.test(s.title || '') || /°C/.test(s.unit || ''); };
-            var cand = sens.filter(function(s){ return isTemp(s) && /bmp/i.test((s.title || '') + ' ' + (s.sensorType || '')); });
-            if (!cand.length) cand = sens.filter(function(s){ return isTemp(s) && !/sht/i.test((s.title || '') + ' ' + (s.sensorType || '')); });
-            if (!cand.length) {
-                console.warn('[delta] sensore BMP temp non trovato. Sensori:', sens.map(function(s){ return s.title + ' / ' + s.sensorType; }));
-                throw new Error('sensore non trovato');
+            var temps = sens.filter(isTemp);
+            var bmp = temps.filter(function(s){ return /bmp/i.test(txt(s)); })[0];
+            var sht = temps.filter(function(s){ return /sht/i.test(txt(s)); })[0];
+            if (!sht) sht = temps.filter(function(s){ return s !== bmp; })[0];
+            if (!bmp) bmp = temps.filter(function(s){ return s !== sht; })[0];
+            if (!bmp || !sht || bmp._id === sht._id) {
+                console.warn('[delta] sensori non trovati. Sensori:', sens.map(function(s){ return s.title + ' / ' + s.sensorType; }));
+                throw new Error('sensori non trovati');
             }
-            osemBmpSensorId = cand[0]._id;
-            return osemBmpSensorId;
+            osemSensorIds = { sht: sht._id, bmp: bmp._id };
+            return osemSensorIds;
         });
     }
 
-    function fetchBmpTemp24h(){
-        return getBmpTempSensorId().then(function(sid){
-            var to = new Date(), from = new Date(to.getTime() - 24*3600*1000);
-            var url = 'https://api.opensensemap.org/boxes/' + OSEM_BOX + '/data/' + sid +
-                      '?from-date=' + from.toISOString() + '&to-date=' + to.toISOString() + '&format=json';
-            return fetch(url).then(function(r){
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.json();
-            });
+    function fetchOsemSeries(sid){
+        var to = new Date(), from = new Date(to.getTime() - 24*3600*1000);
+        var url = 'https://api.opensensemap.org/boxes/' + OSEM_BOX + '/data/' + sid +
+                  '?from-date=' + from.toISOString() + '&to-date=' + to.toISOString() + '&format=json';
+        return fetch(url).then(function(r){
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
         }).then(function(rows){
             return rows.map(function(r){ return { x: new Date(r.createdAt).getTime(), y: parseFloat(r.value) }; })
                        .filter(function(p){ return !isNaN(p.y); })
@@ -1213,26 +1217,27 @@ body{padding-bottom:64px;}
         });
     }
 
-    // Ogni punto BMP (5 min) viene accoppiato al campione SHT40 più vicino (max 3 min di distanza)
-    function computeDelta(sht, bmp){
-        var s = sht.filter(function(p){ return p.y !== null; });
+    // Accoppia ogni punto SHT40 al punto BMP più vicino (max 90 s di distanza)
+    function pairDelta(sht, bmp){
         var out = [], j = 0;
-        if (!s.length) return out;
-        bmp.forEach(function(b){
-            while (j < s.length - 1 && Math.abs(s[j+1].x - b.x) <= Math.abs(s[j].x - b.x)) j++;
-            if (Math.abs(s[j].x - b.x) <= 3*60000) out.push({ x: b.x, y: s[j].y - b.y });
+        if (!bmp.length) return out;
+        sht.forEach(function(s){
+            while (j < bmp.length - 1 && Math.abs(bmp[j+1].x - s.x) <= Math.abs(bmp[j].x - s.x)) j++;
+            if (Math.abs(bmp[j].x - s.x) <= 90000) out.push({ x: s.x, y: s.y - bmp[j].y });
         });
         return out;
     }
 
-    let bmpCache = { t: 0, pts: [] };
-    function getBmpDelta(tData){
-        var fresh = (Date.now() - bmpCache.t) < 4*60000 && bmpCache.pts.length;
-        var p = fresh ? Promise.resolve(bmpCache.pts) : fetchBmpTemp24h().then(function(pts){
-            bmpCache = { t: Date.now(), pts: pts };
+    var osemCache = { t: 0, pts: [] };
+    function getOsemDelta(){
+        if ((Date.now() - osemCache.t) < 4*60000 && osemCache.pts.length) return Promise.resolve(osemCache.pts);
+        return getOsemTempSensors().then(function(ids){
+            return Promise.all([fetchOsemSeries(ids.sht), fetchOsemSeries(ids.bmp)]);
+        }).then(function(res){
+            var pts = pairDelta(res[0], res[1]);
+            osemCache = { t: Date.now(), pts: pts };
             return pts;
         });
-        return p.then(function(pts){ return computeDelta(tData, pts); });
     }
 
     let chartPeriod='24h';
