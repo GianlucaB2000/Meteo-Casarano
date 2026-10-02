@@ -113,11 +113,23 @@
             } catch (e) { err = e.message; out[s.key] = { v: null, t: null }; }
             await sleep(250);
         }
-        return { data: out, err: err };
+        // Ultimi ~20 minuti (1 campione/min) per il confronto con openSenseMap,
+        // che invia medie su 5-10 minuti: un singolo valore istantaneo puo' differire.
+        let win = null;
+        try {
+            const d = await getJson('https://api.thingspeak.com/channels/' + TS_CH + '/feeds.json?api_key=' + TS_RKEY + '&results=20');
+            win = { T: [], H: [], Pslm: [] };
+            ((d && d.feeds) || []).forEach(function(f){
+                [['T', 1], ['H', 2], ['Pslm', 3]].forEach(function(k){
+                    const v = parseFloat(f['field' + k[1]]); if (!isNaN(v)) win[k[0]].push(v);
+                });
+            });
+        } catch (e) { win = null; }
+        return { data: out, err: err, win: win };
     }
 
     // ─── Valutazione e disegno ───
-    function render(osm, osmErr, ts, tsErr){
+    function render(osm, osmErr, ts, tsErr, win){
         const issues = [];
         let overall = 'ok';
         let lastTs = 0, lastOsm = 0;
@@ -155,10 +167,16 @@
                 }
             }
 
-            // Stesso sensore su due piattaforme: i valori devono coincidere
-            const tol = { T: 1.5, H: 5, Pslm: 2 }[s.key];
-            if (tol && o && t && o.v !== null && t.v !== null && o.t && t.t && Math.abs(o.t - t.t) < 10 * 60000 && Math.abs(o.v - t.v) > tol) {
-                flag('warn', 'ThingSpeak (' + fmtV(t.v, s.dec) + ') e openSenseMap (' + fmtV(o.v, s.dec) + ') non coincidono');
+            // Stesso sensore su due piattaforme: openSenseMap invia medie su 5-10 minuti,
+            // ThingSpeak un valore al minuto. Si segnala solo se il valore di openSenseMap
+            // cade fuori dall'intervallo (min-max) visto su ThingSpeak negli ultimi ~20 minuti.
+            const tol = { T: 0.7, H: 3, Pslm: 1 }[s.key];
+            const w = win ? win[s.key] : null;
+            if (tol && o && o.v !== null && w && w.length >= 5) {
+                const lo = Math.min.apply(null, w), hi = Math.max.apply(null, w);
+                if (o.v < lo - tol || o.v > hi + tol) {
+                    flag('warn', 'openSenseMap (' + fmtV(o.v, s.dec) + ') è fuori dall\'intervallo visto su ThingSpeak negli ultimi 20 min (' + fmtV(lo, s.dec) + '–' + fmtV(hi, s.dec) + ')');
+                }
             }
 
             const label = { ok: 'OK', warn: 'Attenzione', bad: 'Problema', na: '—' }[sl];
@@ -212,7 +230,7 @@
         let osm = null, osmErr = null;
         loadOsm().then(function(o){ osm = o; }).catch(function(e){ osmErr = e.message || String(e); })
             .then(function(){ return loadTs(); })
-            .then(function(r){ render(osm, osmErr, r.data, r.err); })
+            .then(function(r){ render(osm, osmErr, r.data, r.err, r.win); })
             .catch(function(e){ console.warn('[stato]', e); })
             .then(function(){ busy = false; });
     }
