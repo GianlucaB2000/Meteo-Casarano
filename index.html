@@ -252,10 +252,13 @@ body{padding-bottom:64px;}
             <button class="ct-btn" id="btn7d" onclick="setChartPeriod('7d')">Ultimi 7 giorni</button>
             <button class="ct-btn" id="btn30d" onclick="setChartPeriod('30d')">30 giorni</button>
             <button class="ct-btn" id="btnAnno" onclick="setChartPeriod('anno')">Anno</button>
+            <!-- MOD 1: bottone delta SHT40-BMP280 -->
+            <button class="ct-btn" id="btnDelta" style="display:none" onclick="toggleTempMode()">Δ SHT40−BMP</button>
             <span style="font-size:.6rem;color:var(--sub);margin-left:4px;" id="chartStatus">Caricamento...</span>
         </div>
         <div class="chart-grid">
-            <div class="chart-box"><div class="chart-title">🌡 Temperatura (°C)</div><div class="chart-wrap"><canvas id="chartT"></canvas></div></div>
+            <!-- MOD 2: id sul titolo del grafico temperatura -->
+            <div class="chart-box"><div class="chart-title" id="chartTTitle">🌡 Temperatura (°C)</div><div class="chart-wrap"><canvas id="chartT"></canvas></div></div>
             <div class="chart-box"><div class="chart-title">🥵 Temperatura Percepita (°C)</div><div class="chart-wrap"><canvas id="chartHx"></canvas></div></div>
             <div class="chart-box"><div class="chart-title">💧 Umidita (%)</div><div class="chart-wrap"><canvas id="chartH"></canvas></div></div>
             <div class="chart-box"><div class="chart-title">💨 Pressione s.l.m. (hPa)</div><div class="chart-wrap"><canvas id="chartP"></canvas></div></div>
@@ -306,10 +309,7 @@ body{padding-bottom:64px;}
     document.addEventListener('click',function(e){ const gw=document.querySelector('.gear-wrap'); if(gw&&!gw.contains(e.target)){ const d=el('gearDrop'); if(d)d.classList.remove('open'); } });
 
     // ─── Orologio ───
-    // Prima usava l'orario dell'ultimo dato ricevuto da ThingSpeak come base:
-    // se la stazione smette di inviare dati per ore, l'orologio mostrato
-    // restava congelato a quel momento invece di mostrare l'ora reale.
-    let serverTime = null; // usata solo per "aggiornato X fa", non per l'orologio
+    let serverTime = null;
     function updateClock() {
         const d = new Date();
         safeSet('ora', String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0'));
@@ -317,18 +317,9 @@ body{padding-bottom:64px;}
     setInterval(updateClock, 1000);
     updateClock();
 
-    // ─── Trend badge: calcolato dentro fetchTs24h (vedi sotto) ───
-
     // ─── Filtro anti-glitch vento ───
-    // Un sensore anemometro DIY puo' dare letture impossibili (es. da 10 a
-    // 50 km/h in un minuto). Scartiamo un valore se: supera un tetto di
-    // sicurezza assoluto (150 km/h, oltre il quale e' certamente un errore
-    // del sensore anche in caso di tempesta), oppure se il salto rispetto
-    // all'ultimo valore plausibile e' troppo brusco. Il valore scartato
-    // viene sostituito con l'ultimo valore plausibile, cosi' non compare
-    // ne' nei grafici ne' negli estremi (max raffica/velocita').
-    const WIND_MAX_JUMP = 30;   // km/h di differenza max tra due letture consecutive
-    const WIND_ABS_CAP = 150;   // km/h oltre il quale il dato e' scartato comunque
+    const WIND_MAX_JUMP = 30;
+    const WIND_ABS_CAP = 150;
     function despikeWindFeeds(feeds, field){
         let prevVal = null;
         return feeds.map(f=>{
@@ -477,11 +468,6 @@ body{padding-bottom:64px;}
     }
 
     // ─── Cache locale per estremi (mese per mese) ───
-    // IMPORTANTE: per gli estremi esatti non serve conservare milioni di letture.
-    // Salviamo solo min/max + timestamp di ogni mese e, per il mese corrente,
-    // l'ultimo timestamp ricevuto. Lo storico viene letto a mediana di 60 minuti
-    // per evitare di scaricare milioni di campioni: gli estremi storici sono quindi
-    // estremi delle letture aggregate, non dei singoli campioni grezzi.
     const CACHE_VER = 'v6';
     function cacheKey(period){ return 'meteoTetto_'+period+'_'+CACHE_VER; }
     function monthKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
@@ -554,7 +540,6 @@ body{padding-bottom:64px;}
 
     function combineSummaries(list){
         let out=emptyExtSummary();
-        // Somma min/max direttamente, senza riscaricare le letture.
         list.forEach(obj=>{
             if(!obj||!obj.summary) return;
             EXT_FIELDS.forEach(f=>{
@@ -614,20 +599,6 @@ body{padding-bottom:64px;}
     setInterval(fetchTsYear,3600000);
 
     // ─── Zambretti ───
-    // Riscritto per essere il più fedele possibile al metodo originale (1920):
-    // 1) niente correzione altimetrica qui: field3 è già pressione a livello
-    //    del mare (calcolata in firmware con temperatura + quota 139-140m),
-    //    quindi la vecchia "+10 / +15 in estate" era una doppia correzione
-    //    che falsava sistematicamente P verso l'alto.
-    // 2) il trend a 3h è la VERA differenza tra "adesso" e "3h fa" (non più
-    //    una stima da 30 minuti moltiplicata per 6: quella scala per 6 anche
-    //    il rumore di un singolo campione, ed estrapola linearmente un
-    //    andamento che nella realtà è spesso curvo).
-    // 3) entrambi i due valori (adesso / 3h fa) sono la mediana di pochi
-    //    campioni vicini, non un singolo dato grezzo: un glitch del sensore
-    //    non deve poter cambiare la categoria di previsione.
-    // 4) si scarica solo la finestra di dati realmente necessaria (~3h15m),
-    //    non centinaia di campioni su 2 giorni per poi usarne solo due punti.
     function median(arr){
         const s=arr.filter(v=>!isNaN(v)).sort((a,b)=>a-b);
         if(!s.length) return NaN;
@@ -636,7 +607,7 @@ body{padding-bottom:64px;}
     }
     function fetchZambrettiTS(){
         const nowDate=new Date();
-        const start=new Date(nowDate.getTime()-195*60*1000); // 3h15m fa: 3h + margine
+        const start=new Date(nowDate.getTime()-195*60*1000);
         const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+start.toISOString()+'&end='+nowDate.toISOString()+'&results=8000';
         fetch(url).then(r=>r.json()).then(data=>{
             if(!data||!data.feeds||data.feeds.length<20){ console.warn('[Zambretti] feeds insufficienti'); return; }
@@ -644,9 +615,6 @@ body{padding-bottom:64px;}
                 .map(f=>({ t:new Date(f.created_at).getTime(), v:parseFloat(f.field3) }))
                 .filter(p=>!isNaN(p.v)&&p.v>800);
             if(series.length<20){ console.warn('[Zambretti] pressioni valide <20'); return; }
-            // Despike: scarta un campione se si discosta di oltre 3 hPa dalla
-            // mediana di una finestra di punti vicini (un salto del genere in
-            // pochi minuti è certamente un errore del sensore, non meteo reale).
             const vals=series.map(p=>p.v);
             series=series.filter((p,i)=>{
                 const lo=Math.max(0,i-4), hi=Math.min(vals.length-1,i+4);
@@ -659,19 +627,14 @@ body{padding-bottom:64px;}
             });
             if(series.length<20){ console.warn('[Zambretti] pressioni valide dopo despike <20'); return; }
 
-            // "Adesso": mediana degli ultimi ~5 campioni (5 min).
             const last=median(series.slice(-5).map(p=>p.v));
-            // "3 ore fa": mediana dei campioni entro ±7 minuti dal punto
-            // a esattamente 180 minuti fa (vera differenza a 3h, non estrapolata).
             const target=nowDate.getTime()-180*60*1000;
             const nearOld=series.filter(p=>Math.abs(p.t-target)<=7*60*1000).map(p=>p.v);
             if(nearOld.length<3){ console.warn('[Zambretti] campioni insufficienti vicino a -3h'); return; }
             const old=median(nearOld);
 
-            const trend=last-old; // hPa reali nelle ultime 3 ore
+            const trend=last-old;
             const month=new Date().getMonth()+1;
-            // Field3 è già s.l.m.: P si ricava direttamente da 'last', senza
-            // ulteriori correzioni di quota o stagionali sulla pressione.
             let P=Math.round(last*10);
             let Z;
             const est=(month>=6&&month<=8), inv=(month===12||month<=2);
@@ -694,13 +657,6 @@ body{padding-bottom:64px;}
 
     // ─── Pioggia mensile/annuale ───
     function calcRainTotals(){
-        // Il contatore field8 si azzera a mezzanotte italiana, quindi mese/anno
-        // vanno calcolati sui giorni locali (timezone=Europe/Rome). Con max=1440
-        // ThingSpeak restituisce un solo valore al giorno (il massimo = totale
-        // del giorno): bastano al piu' 366 righe, invece di 8000 campioni grezzi.
-        // Nota: i giorni precedenti alla correzione del firmware avevano il reset
-        // a mezzanotte UTC, quindi un giorno con pioggia a cavallo del reset
-        // (00:00-02:00 locali) puo' essere sottostimato di poco.
         const now=new Date();
         const y=now.getFullYear();
         const mo=String(now.getMonth()+1).padStart(2,'0');
@@ -729,22 +685,10 @@ body{padding-bottom:64px;}
 
     // ─── Calcoli termici ───
     function dewPoint(T,H){ const a=17.27,b=237.7; const g=a*T/(b+T)+Math.log(H/100); return b*g/(a-g); }
-    // Punto di brina (frost point): come il punto di rugiada, ma calcolato
-    // rispetto alla tensione di vapore di saturazione sul GHIACCIO (costanti di
-    // Magnus per il ghiaccio, a=21.8746 b=265.5, standard WMO), non sull'acqua.
-    // Sotto 0°C il punto di brina è sempre più basso del punto di rugiada, perché
-    // il ghiaccio ha una tensione di vapore di saturazione minore dell'acqua
-    // sopraffusa: è la soglia utile per capire se si formerà galaverna/brina.
     function frostPoint(T,H){ const a=21.8746,b=265.5; const g=a*T/(b+T)+Math.log(H/100); return b*g/(a-g); }
-    // Altezza stimata della base delle nuvole (livello di condensazione per
-    // sollevamento, LCL) con l'approssimazione di Espy: il gradiente adiabatico
-    // secco (~9.8°C/km) meno la diminuzione del punto di rugiada in quota
-    // (~1.8°C/km) dà una convergenza di ~8°C/km, cioè ~125 m per ogni °C di
-    // scarto tra temperatura e punto di rugiada al suolo. È una stima basata
-    // su un'atmosfera "media", non una misura diretta (radiosondaggio/LIDAR).
     function cloudBaseHeight(T,dp){
         if(isNaN(T)||isNaN(dp)) return NaN;
-        if(T<=dp) return 0; // aria satura al suolo: nebbia, non nube in quota
+        if(T<=dp) return 0;
         return Math.round((T-dp)*125);
     }
     function feelsLike(T,H,V){ if(T<10&&V>4.8) return 13.12+0.6215*T-11.37*Math.pow(V,0.16)+0.3965*T*Math.pow(V,0.16); if(T>27) return -8.784695+1.61139411*T+2.3385490*H-0.14611605*T*H-0.01230809*T*T-0.01642482*H*H+0.00221173*T*T*H+0.00072546*T*H*H-0.00000358*T*T*H*H; return T; }
@@ -923,7 +867,7 @@ body{padding-bottom:64px;}
     let windMode='both';
     const WR_HIST_MAX=120;
     let lastDir=0, lastSpeed=0;
-    let lastLiveV=null, lastLiveG=null; // ultima lettura live plausibile, per il filtro anti-glitch
+    let lastLiveV=null, lastLiveG=null;
 
     function setWindMode(m){
         windMode=m;
@@ -997,10 +941,6 @@ body{padding-bottom:64px;}
             });
         }
         function toTimeSeries(field) { return toTimeSeriesFrom(feeds, field); }
-        // Scarta gli outlier confrontando ogni punto con la mediana di una
-        // finestra di punti vicini: un glitch che dura piu' di un campione
-        // (come quello del 9 settembre) sfuggiva al controllo precedente,
-        // che guardava solo il vicino immediato.
         function despike(data, maxJump, half) {
             half = half || 4;
             const values = data.map(function(p){ return p.y; });
@@ -1037,17 +977,9 @@ body{padding-bottom:64px;}
         var hData = toTimeSeries(2);
         var pDataRaw = toTimeSeries(3);
         var pData = despike(pDataRaw.map(function(p){ if(p.y===null||p.y<940||p.y>1050) return {x:p.x,y:null}; return p; }), 4);
-        // Il vento ora usa la stessa risoluzione/aggregazione del resto dei
-        // grafici (la stessa 'feeds' gia' scaricata per Temperatura/Umidita'/
-        // Pressione), invece di una fetch separata a mediana fissa di 10 minuti:
-        // il filtro despikeWind() sui glitch del sensore e' sufficiente da solo.
         var windSrc = despikeWind(feeds);
         var vData = toTimeSeriesFrom(windSrc, 4);
         var gData = toTimeSeriesFrom(windSrc, 5);
-        // Temperatura Percepita: stessa formula (feelsLike, con heat index sopra
-        // i 27°C e wind chill sotto i 10°C) gia' usata per il valore live "Percepita",
-        // calcolata qui punto per punto da temperatura, umidita' e vento dello
-        // stesso campione, cosi' il grafico e' coerente con la card in alto.
         var flData = feeds.map(function(f,i){
             var t = tData[i] ? tData[i].y : null;
             var hRaw = parseFloat(f.field2);
@@ -1059,11 +991,40 @@ body{padding-bottom:64px;}
             return { x: x, y: (fl===null||isNaN(fl)) ? null : fl };
         });
         var lData = toTimeSeries(7).map(function(p){ return { x: p.x, y: (p.y===null)?null:Math.max(p.y,0.01) }; });
-        // La pioggia accumulata non puo' mai essere negativa (e' un contatore che
-        // sale durante il giorno e si azzera a mezzanotte): eventuali valori
-        // negativi spuri vengono riportati a 0 invece di essere disegnati com'e'.
         var rData = toTimeSeries(8).map(function(p){ return { x: p.x, y: (p.y===null)?null:Math.max(p.y,0) }; });
-        makeChart('chartT', 'line', [makeDataset(tData, '#58a6ff', 'Temperatura')], null, baseOpts('°C'));
+
+        // ═══ MOD 3: grafico temperatura con toggle Δ SHT40−BMP ═══
+        window.renderTempChart = function(){
+            var btn = el('btnDelta');
+            if (btn) btn.style.display = (period === '24h') ? '' : 'none';
+            if (period !== '24h') tempMode = 'temp';
+            if (btn) btn.classList.toggle('active', tempMode === 'delta');
+            if (tempMode !== 'delta') {
+                safeSet('chartTTitle', '🌡 Temperatura (°C)');
+                makeChart('chartT', 'line', [makeDataset(tData, '#58a6ff', 'Temperatura')], null, baseOpts('°C'));
+                return;
+            }
+            var token = ++deltaToken;
+            safeSet('chartTTitle', '🌡 Delta termico SHT40 − BMP280 (°C)');
+            safeSet('chartStatus', 'Carico BMP280 da openSenseMap...');
+            getBmpDelta(tData).then(function(delta){
+                if (token !== deltaToken || tempMode !== 'delta') return;
+                if (!delta.length) { safeSet('chartStatus', 'Nessun dato BMP280'); return; }
+                var mean = delta.reduce(function(a,p){ return a + p.y; }, 0) / delta.length;
+                var x0 = delta[0].x, x1 = delta[delta.length-1].x;
+                var zero = { label: 'Zero', data: [{x:x0,y:0},{x:x1,y:0}], borderColor: '#8b949e', borderDash: [4,4], borderWidth: 1, pointRadius: 0, fill: false };
+                var avg = { label: 'Media ' + mean.toFixed(2) + ' °C', data: [{x:x0,y:mean},{x:x1,y:mean}], borderColor: '#f85149', borderDash: [6,3], borderWidth: 1.5, pointRadius: 0, fill: false };
+                makeChart('chartT', 'line', [makeDataset(delta, '#e3b341', 'SHT40 − BMP280'), zero, avg], null, baseOpts('Δ °C'));
+                safeSet('chartStatus', 'Delta: ' + delta.length + ' punti · media ' + mean.toFixed(2) + ' °C');
+            }).catch(function(e){
+                console.warn('[delta]', e);
+                tempMode = 'temp';
+                safeSet('chartStatus', 'Errore openSenseMap');
+                window.renderTempChart();
+            });
+        };
+        window.renderTempChart();
+
         makeChart('chartHx', 'line', [makeDataset(flData, '#e3b341', 'Percepita')], null, baseOpts('°C'));
         makeChart('chartH', 'line', [makeDataset(hData, '#3fb950', 'Umidità')], null, baseOpts('%'));
         makeChart('chartP', 'line', [makeDataset(pData, '#c084fc', 'Pressione slm')], null, baseOpts('hPa'));
@@ -1072,9 +1033,6 @@ body{padding-bottom:64px;}
         makeChart('chartL', 'line', [makeDataset(lData, '#f59e0b', 'Luce')], null, lOpts);
         var rainOpts, rainBars, rainLine, rainLineLabel, barLabel;
         if (period !== '24h' && rainDaily && rainDaily.length) {
-            // 7 giorni / 30 giorni / Anno: barre = mm totali per giorno,
-            // linea = totale cumulato nel periodo (i dati grezzi sono gia'
-            // aggregati con la mediana, quindi non si puo' derivare l'intensita').
             var cum = 0;
             rainBars = rainDaily.map(function(p){ return { x: p.x, y: p.y }; });
             rainLine = rainDaily.map(function(p){ cum += p.y; return { x: p.x, y: Math.round(cum * 100) / 100 }; });
@@ -1082,14 +1040,12 @@ body{padding-bottom:64px;}
             rainLineLabel = 'Totale periodo mm';
             rainOpts = baseOpts('mm / giorno');
         } else {
-            // 24 ore: intensita' in mm/h calcolata a intervalli di 10 minuti
-            // (prima era un punto per campione: barre piu' sottili di 1 px).
             var binMs = 10 * 60000;
             var bins = {};
             for (var i = 1; i < rData.length; i++) {
                 var pr = rData[i - 1], cu = rData[i];
                 if (!pr || !cu || pr.y === null || cu.y === null) continue;
-                var df = cu.y - pr.y; if (df < 0) df = 0;   // salta il reset di mezzanotte
+                var df = cu.y - pr.y; if (df < 0) df = 0;
                 var k = Math.floor(cu.x / binMs) * binMs;
                 bins[k] = (bins[k] || 0) + df;
             }
@@ -1107,7 +1063,7 @@ body{padding-bottom:64px;}
             rainOpts = baseOpts('mm/h');
         }
         rainOpts.scales.y.min = 0;
-        rainOpts.scales.y.suggestedMax = 4;   // anche la pioggia debole resta ben visibile
+        rainOpts.scales.y.suggestedMax = 4;
         rainOpts.scales.y1 = { position: 'right', min: 0, ticks: { color: '#8b949e', font: { size: 9 } }, grid: { drawOnChartArea: false }, border: { color: '#30363d' }, title: { display: true, text: 'mm (accumulo)', color: '#8b949e', font: { size: 9 } } };
         makeChart('chartRain', 'bar', [
             { type: 'bar', label: barLabel, data: rainBars, backgroundColor: 'rgba(96,165,250,0.9)', borderColor: '#93c5fd', borderWidth: 1, barPercentage: 1, categoryPercentage: 1, yAxisID: 'y' },
@@ -1123,26 +1079,8 @@ body{padding-bottom:64px;}
     }
 
     // ─── Fetch ThingSpeak per grafici (con chunk adattivo) ───
-    // Nota: si usa 'median' invece di 'average' perche' la mediana e' meno
-    // sensibile a buchi/outlier nei dati (es. un campione mancante non
-    // fa crollare il valore come potrebbe fare una media aritmetica).
-
-    // Piccola pausa tra una richiesta e l'altra: ThingSpeak, se bombardato
-    // troppo in fretta con richieste in sequenza, a volte risponde con un
-    // errore o un JSON vuoto (non un errore di rete). Prima il codice
-    // interpretava "nessun feed nella risposta" come "nessun dato in quel
-    // periodo" e perdeva pezzi interi senza accorgersene: era la causa
-    // principale dei "buchi" nel grafico Anno (47 campioni invece di 200+).
     function sleep(ms) { return new Promise(function(res) { setTimeout(res, ms); }); }
 
-    // Scarica un singolo intervallo [start, end]. Se la risposta torna
-    // "piena" (>= 8000 record, il limite per richiesta di ThingSpeak),
-    // vuol dire che ci sono ancora piu' dati in quell'intervallo di quanti
-    // ThingSpeak ne possa restituire in un colpo solo: in quel caso
-    // l'intervallo viene diviso a meta' e riscaricato ricorsivamente su
-    // ciascuna meta', senza bisogno di indovinare quanto spesso invia dati
-    // la centralina (era la causa principale del massimo di 40.8°C
-    // "perso" e sostituito da un 37.7°C parziale).
     function fetchThingSpeakChunk(start, end, aggMinutes, attempt) {
         attempt = attempt || 0;
         var url = 'https://api.thingspeak.com/channels/' + TS_CH + '/feeds.json?api_key=' + TS_RKEY + '&start=' + start.toISOString() + '&end=' + end.toISOString() + '&results=8000';
@@ -1157,10 +1095,6 @@ body{padding-bottom:64px;}
         }).then(function(data) {
             var feeds = (data && Array.isArray(data.feeds)) ? data.feeds : null;
 
-            // ThingSpeak puo' rispondere con HTTP 200 e feeds=[] quando una
-            // richiesta ravvicinata viene limitata/servita male. Per il grafico
-            // storico questo non va interpretato immediatamente come "nessun
-            // dato": riproviamo fino a 3 volte.
             if (feeds === null || feeds.length === 0) {
                 if (attempt < 3) {
                     console.warn('[TS chunk RETRY]', start.toISOString(), '->',
@@ -1171,19 +1105,12 @@ body{padding-bottom:64px;}
                 }
                 console.warn('[TS chunk EMPTY]', start.toISOString(), '->',
                              end.toISOString(), 'dopo 3 retry');
-                // Se il periodo e' davvero vuoto (nessun dato salvato), [] e' corretto.
-                // I retry precedenti hanno gia' escluso un errore transitorio nella maggior
-                // parte dei casi, evitando di perdere silenziosamente un intero intervallo.
                 return [];
             }
 
             console.log('[TS chunk END]', start.toISOString(), '->', end.toISOString(),
                         'feeds=', feeds.length);
 
-            // Risposta "piena": ci sono probabilmente altri dati in questo
-            // intervallo oltre a quelli restituiti. Si divide l'intervallo
-            // a meta' e si scaricano le due meta' separatamente (in
-            // sequenza, per non farsi bloccare da ThingSpeak).
             var durationMs = end.getTime() - start.getTime();
             if (feeds.length >= 8000 && durationMs > 60000) {
                 var mid = new Date(start.getTime() + durationMs / 2);
@@ -1200,7 +1127,6 @@ body{padding-bottom:64px;}
 
             return feeds;
         }).catch(function(e) {
-            // Errore di rete vero e proprio: stesso meccanismo di retry.
             if (attempt < 3) {
                 return sleep(800 * (attempt + 1)).then(function() {
                     return fetchThingSpeakChunk(start, end, aggMinutes, attempt + 1);
@@ -1220,9 +1146,6 @@ body{padding-bottom:64px;}
             ranges.push([new Date(cursor), chunkEnd]);
             cursor = chunkEnd;
         }
-        // Richieste in sequenza CON PAUSA tra l'una e l'altra (necessaria
-        // per non farsi bloccare da ThingSpeak quando arrivano troppe
-        // richieste ravvicinate sullo stesso canale).
         var results = [];
         return ranges.reduce(function(p, range, idx) {
             return p.then(function() {
@@ -1243,14 +1166,79 @@ body{padding-bottom:64px;}
         });
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // MOD 4: blocco Delta termico SHT40 − BMP280 (BMP da openSenseMap)
+    // Inserito subito prima di "let chartPeriod='24h';"
+    // ═══════════════════════════════════════════════════════════════════
+    const OSEM_BOX = '6ab3d710e3bf1c00070bb789';
+    let tempMode = 'temp', deltaToken = 0, osemBmpSensorId = null;
+
+    function toggleTempMode(){
+        tempMode = (tempMode === 'temp') ? 'delta' : 'temp';
+        if (window.renderTempChart) window.renderTempChart();
+    }
+
+    function getBmpTempSensorId(){
+        if (osemBmpSensorId) return Promise.resolve(osemBmpSensorId);
+        return fetch('https://api.opensensemap.org/boxes/' + OSEM_BOX).then(function(r){
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        }).then(function(box){
+            var sens = box.sensors || [];
+            var isTemp = function(s){ return /temp/i.test(s.title || '') || /°C/.test(s.unit || ''); };
+            var cand = sens.filter(function(s){ return isTemp(s) && /bmp/i.test((s.title || '') + ' ' + (s.sensorType || '')); });
+            if (!cand.length) cand = sens.filter(function(s){ return isTemp(s) && !/sht/i.test((s.title || '') + ' ' + (s.sensorType || '')); });
+            if (!cand.length) {
+                console.warn('[delta] sensore BMP temp non trovato. Sensori:', sens.map(function(s){ return s.title + ' / ' + s.sensorType; }));
+                throw new Error('sensore non trovato');
+            }
+            osemBmpSensorId = cand[0]._id;
+            return osemBmpSensorId;
+        });
+    }
+
+    function fetchBmpTemp24h(){
+        return getBmpTempSensorId().then(function(sid){
+            var to = new Date(), from = new Date(to.getTime() - 24*3600*1000);
+            var url = 'https://api.opensensemap.org/boxes/' + OSEM_BOX + '/data/' + sid +
+                      '?from-date=' + from.toISOString() + '&to-date=' + to.toISOString() + '&format=json';
+            return fetch(url).then(function(r){
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            });
+        }).then(function(rows){
+            return rows.map(function(r){ return { x: new Date(r.createdAt).getTime(), y: parseFloat(r.value) }; })
+                       .filter(function(p){ return !isNaN(p.y); })
+                       .sort(function(a,b){ return a.x - b.x; });
+        });
+    }
+
+    // Ogni punto BMP (5 min) viene accoppiato al campione SHT40 più vicino (max 3 min di distanza)
+    function computeDelta(sht, bmp){
+        var s = sht.filter(function(p){ return p.y !== null; });
+        var out = [], j = 0;
+        if (!s.length) return out;
+        bmp.forEach(function(b){
+            while (j < s.length - 1 && Math.abs(s[j+1].x - b.x) <= Math.abs(s[j].x - b.x)) j++;
+            if (Math.abs(s[j].x - b.x) <= 3*60000) out.push({ x: b.x, y: s[j].y - b.y });
+        });
+        return out;
+    }
+
+    let bmpCache = { t: 0, pts: [] };
+    function getBmpDelta(tData){
+        var fresh = (Date.now() - bmpCache.t) < 4*60000 && bmpCache.pts.length;
+        var p = fresh ? Promise.resolve(bmpCache.pts) : fetchBmpTemp24h().then(function(pts){
+            bmpCache = { t: Date.now(), pts: pts };
+            return pts;
+        });
+        return p.then(function(pts){ return computeDelta(tData, pts); });
+    }
+
     let chartPeriod='24h';
 
     // ─── Grafico Anno ───
-    // IMPORTANTE: "Anno" = ultimi 365 giorni, non anno solare.
-    // La cache e' suddivisa per mese, ma il mese corrente viene sempre
-    // aggiornato. Un mese storico viene riutilizzato solo se e' stato
-    // scaricato completamente.
-    const AGG_ANNO_MINUTES = 1440; // 1 punto/giorno: massimo ~365 punti
+    const AGG_ANNO_MINUTES = 1440;
 
     function loadChartMonthCache(d){
         try{
@@ -1275,14 +1263,10 @@ body{padding-bottom:64px;}
         const current=isCurrentMonth(monthStart);
         const cached=loadChartMonthCache(monthStart);
 
-        // I mesi chiusi possono essere riutilizzati.
         if(cached && cached.complete && !current){
             return Promise.resolve(cached.feeds||[]);
         }
 
-        // Per il mese corrente si riscarica il mese intero: e' piccolo
-        // e impedisce che un buco causato da una risposta vuota resti
-        // congelato nella cache.
         chartMonthLocks[key]=fetchThingSpeakRange(
             new Date(monthStart),
             new Date(monthEnd),
@@ -1301,7 +1285,6 @@ body{padding-bottom:64px;}
         const now=new Date();
         const yearAgo=new Date(now.getTime()-365*24*60*60*1000);
 
-        // Costruiamo i mesi che intersecano gli ultimi 365 giorni.
         let cursor=new Date(yearAgo.getFullYear(),yearAgo.getMonth(),1);
         const months=[];
         while(cursor<now){
@@ -1316,7 +1299,6 @@ body{padding-bottom:64px;}
         return months.reduce(function(p,range){
             return p.then(function(acc){
                 return fetchChartMonthCached(range[0],range[1]).then(function(feeds){
-                    // Tagliamo eventuali dati fuori dalla finestra esatta.
                     const filtered=(feeds||[]).filter(function(f){
                         const t=new Date(f.created_at);
                         return t>=yearAgo && t<=now;
@@ -1335,7 +1317,6 @@ body{padding-bottom:64px;}
         });
     }
 
-    // Pioggia giornaliera (massimo del contatore per giorno italiano = totale del giorno)
     function fetchRainDaily(start,end){
         const url='https://api.thingspeak.com/channels/'+TS_CH+'/feeds.json?api_key='+TS_RKEY+'&start='+start.toISOString()+'&end='+end.toISOString()+'&max=1440&timezone=Europe/Rome&results=8000';
         return fetch(url).then(r=>r.json()).then(function(data){
@@ -1361,9 +1342,6 @@ body{padding-bottom:64px;}
         else if(period==='7d'){ start.setDate(start.getDate()-7); aggMinutes=10; }
         else if(period==='30d'){ start.setDate(start.getDate()-30); aggMinutes=60; }
 
-        // Il vento ora segue sempre la stessa risoluzione/aggregazione degli
-        // altri grafici: non serve piu' una seconda fetch dedicata a mediana
-        // fissa di 10 minuti (il filtro despikeWind() basta a togliere i glitch).
         let promise;
         if(period==='anno') promise=fetchYearChartCached();
         else promise=fetchThingSpeakRange(start,end,aggMinutes,chunkDays);
@@ -1371,7 +1349,6 @@ body{padding-bottom:64px;}
         promise=promise.then(function(feeds){
             if(!feeds || feeds.length===0 || loadId!==chartLoadSeq || period!==chartPeriod) return {feeds:feeds,rain:null};
             if(period==='anno'){
-                // Taglia i giorni iniziali senza dati validi: il grafico parte dal primo dato reale
                 const fv=feeds.findIndex(function(f){ return !isNaN(parseFloat(f.field1)); });
                 if(fv>0) feeds=feeds.slice(fv);
             }
@@ -1421,10 +1398,6 @@ body{padding-bottom:64px;}
             d.P = parseFloat(feed.field3);
             let vRaw = parseFloat(feed.field4) || 0;
             let gRaw = parseFloat(feed.field5) || 0;
-            // Stesso filtro anti-glitch usato per grafici/estremi: se il
-            // salto rispetto all'ultima lettura plausibile e' troppo brusco
-            // (o il valore e' assurdo), si scarta e si tiene l'ultimo valore
-            // buono, cosi' compasso e card non "saltano" per un errore sensore.
             if(lastLiveV!==null && (vRaw>WIND_ABS_CAP || Math.abs(vRaw-lastLiveV)>WIND_MAX_JUMP)) vRaw = lastLiveV;
             if(lastLiveG!==null && (gRaw>WIND_ABS_CAP || Math.abs(gRaw-lastLiveG)>WIND_MAX_JUMP)) gRaw = lastLiveG;
             lastLiveV = vRaw; lastLiveG = gRaw;
@@ -1456,9 +1429,6 @@ body{padding-bottom:64px;}
                 const dp = dewPoint(d.T,d.H);
                 safeSet('FL', fmt(feelsLike(d.T,d.H,d.V)));
                 safeSet('DP', fmt(dp));
-                // Il punto di brina si mostra solo quando è effettivamente
-                // rilevante (temperatura vicina o sotto lo zero): sopra i
-                // 2°C non ha senso pratico ed è ridondante col punto di rugiada.
                 const frostRow = el('frostRow');
                 if(frostRow){
                     if(d.T<=2){
@@ -1468,7 +1438,6 @@ body{padding-bottom:64px;}
                         frostRow.style.display='none';
                     }
                 }
-                // Base nubi stimata (formula di Espy) dallo spread T-Td.
                 const cb = cloudBaseHeight(d.T,dp);
                 safeSet('CBSpread', fmt(d.T-dp,1));
                 safeSet('CB', isNaN(cb) ? '--' : (cb===0 ? 'Nebbia/suolo' : cb+' m'));
