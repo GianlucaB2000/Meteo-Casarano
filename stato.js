@@ -154,7 +154,7 @@
             }
 
             // ThingSpeak
-            let tCell = '<span style="color:var(--sub)">non inviato</span>', tDot = 'na';
+            let tCell = '<span style="color:var(--sub)">non previsto su ThingSpeak</span>', tDot = 'na';
             const t = s.ts ? ts[s.key] : null;
             if (s.ts) {
                 if (!t || t.v === null || !t.t) { tDot = 'bad'; flag('bad', 'nessun dato su ThingSpeak'); tCell = '--'; }
